@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inicio — remateTaller</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+<link rel="stylesheet" href="design-system.css">
+</head>
+<body>
+
+<header id="topbar"></header>
+
+<main>
+  <h1 id="saludo">Hola 👋</h1>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="num" id="kpiProductos">—</div>
+      <div class="lbl">Productos</div>
+    </div>
+    <div class="kpi">
+      <div class="num" id="kpiLlaves">—</div>
+      <div class="lbl">Llaves activas</div>
+    </div>
+    <div class="kpi">
+      <div class="num" id="kpiPedidos">—</div>
+      <div class="lbl">Pedidos enviados</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Primeros pasos</h2>
+    <p class="texto-suave">
+      Empezá cargando el inventario del depósito desde
+      <strong>Inventario</strong>. Cuando tengas productos cargados,
+      generá una <strong>Llave</strong> para invitar a un comprador.
+    </p>
+    <p class="texto-suave" id="estadoPaginas">
+      Las secciones Inventario, Llaves, Pedidos y Ventas se habilitan
+      en las próximas tandas de desarrollo.
+    </p>
+  </div>
+</main>
+
+<script type="module">
+import {
+  verificarAuth, renderNav, db,
+  collection, query, where, getDocs, getCountFromServer
+} from "./utils.js";
+
+verificarAuth(async (user, datos) => {
+  renderNav("panel");
+  document.getElementById("saludo").textContent =
+    "Hola, " + (datos.nombre || "admin") + " 👋";
+
+  // KPIs (tolerantes a colecciones vacías o inexistentes)
+  cargarKpi("kpiProductos", () =>
+    getCountFromServer(collection(db, "productos"))
+  );
+  cargarKpi("kpiPedidos", () =>
+    getCountFromServer(query(collection(db, "pedidos"), where("estado", "==", "enviado")))
+  );
+  cargarLlavesActivas();
+});
+
+async function cargarKpi(id, fn) {
+  try {
+    const snap = await fn();
+    document.getElementById(id).textContent = snap.data().count;
+  } catch (e) {
+    document.getElementById(id).textContent = "0";
+  }
+}
+
+async function cargarLlavesActivas() {
+  try {
+    const snap = await getDocs(
+      query(collection(db, "llaves"), where("revocada", "==", false))
+    );
+    const ahora = Date.now();
+    let activas = 0;
+    snap.forEach((d) => {
+      const v = d.data().venceEn;
+      const ms = v && v.toDate ? v.toDate().getTime() : Number(v || 0);
+      if (ms > ahora) activas++;
+    });
+    document.getElementById("kpiLlaves").textContent = activas;
+  } catch (e) {
+    document.getElementById("kpiLlaves").textContent = "0";
+  }
+}
+</script>
+</body>
+</html>
