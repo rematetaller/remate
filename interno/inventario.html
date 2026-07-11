@@ -79,7 +79,16 @@
     <input type="number" id="pPrecioLote" inputmode="decimal" min="0" placeholder="Dejar vacío si no aplica">
 
     <label>Fotos</label>
-    <input type="file" id="pFotos" accept="image/*" multiple>
+    <div class="fila">
+      <button type="button" class="btn secundario" id="btnCamara" style="margin-top:0;">
+        <span class="material-icons">photo_camera</span> Sacar foto
+      </button>
+      <button type="button" class="btn secundario" id="btnGaleria" style="margin-top:0;">
+        <span class="material-icons">photo_library</span> Galería
+      </button>
+    </div>
+    <input type="file" id="pFotoCamara" accept="image/*" capture="environment" style="display:none;">
+    <input type="file" id="pFotosGaleria" accept="image/*" multiple style="display:none;">
     <div class="thumbs" id="thumbs"></div>
     <p class="texto-suave" id="estadoFotos" style="display:none;"></p>
 
@@ -179,7 +188,18 @@ document.getElementById("btnAgregarCat").addEventListener("click", async () => {
 });
 
 // ================= Fotos =================
-document.getElementById("pFotos").addEventListener("change", async (e) => {
+// Cámara directa o galería. Todas se redimensionan a máx. 800px
+// (mismo criterio que las facturas de gastos de CasaVerde).
+const MAX_LADO_FOTO = 800;
+
+document.getElementById("btnCamara").addEventListener("click", () => {
+  document.getElementById("pFotoCamara").click();
+});
+document.getElementById("btnGaleria").addEventListener("click", () => {
+  document.getElementById("pFotosGaleria").click();
+});
+
+async function procesarFotos(e) {
   const files = Array.from(e.target.files || []);
   if (files.length === 0) return;
   const estado = document.getElementById("estadoFotos");
@@ -187,7 +207,7 @@ document.getElementById("pFotos").addEventListener("change", async (e) => {
   for (let i = 0; i < files.length; i++) {
     estado.textContent = "Subiendo foto " + (i + 1) + " de " + files.length + "…";
     try {
-      const url = await subirFoto(files[i], "productos");
+      const url = await subirFoto(files[i], "productos", MAX_LADO_FOTO);
       fotos.push(url);
       renderThumbs();
     } catch (err) {
@@ -197,7 +217,10 @@ document.getElementById("pFotos").addEventListener("change", async (e) => {
   }
   estado.style.display = "none";
   e.target.value = "";
-});
+}
+
+document.getElementById("pFotoCamara").addEventListener("change", procesarFotos);
+document.getElementById("pFotosGaleria").addEventListener("change", procesarFotos);
 
 function renderThumbs() {
   document.getElementById("thumbs").innerHTML = fotos.map((u, i) =>

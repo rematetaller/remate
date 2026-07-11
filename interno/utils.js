@@ -210,8 +210,10 @@ export function comprimirImagen(file, maxLado = 2000, calidad = 0.85) {
   });
 }
 
-export async function subirFoto(file, carpeta) {
-  const blob = await comprimirImagen(file);
+// maxLado: lado mayor máximo en px (default 2000; el inventario de
+// productos usa 800, como las facturas de gastos de CasaVerde).
+export async function subirFoto(file, carpeta, maxLado = 2000) {
+  const blob = await comprimirImagen(file, maxLado);
   const fd = new FormData();
   fd.append("file", blob);
   fd.append("upload_preset", CLOUDINARY.preset);
