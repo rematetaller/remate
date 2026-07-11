@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Catálogo — remateTaller</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+<link rel="stylesheet" href="interno/design-system.css">
+</head>
+<body>
+
+<header id="topbar">
+  <div class="brand"><span class="material-icons">gavel</span><span>remateTaller</span></div>
+</header>
+
+<main>
+  <div id="vistaCargando" class="centrado">
+    <p class="texto-suave">Cargando tu catálogo…</p>
+  </div>
+
+  <div id="vistaCatalogo" style="display:none;">
+    <h1 id="saludoComprador">Hola 👋</h1>
+    <div class="card">
+      <p><span class="badge ok">Acceso activo</span></p>
+      <p class="texto-suave" id="infoVence"></p>
+      <p class="texto-suave" id="infoCategorias"></p>
+    </div>
+    <div class="card centrado">
+      <span class="material-icons" style="font-size:40px; color:var(--c-primario);">construction</span>
+      <p class="texto-suave">
+        El catálogo de productos está en preparación.
+        Pronto vas a poder ver los artículos y armar tu compra desde acá.
+      </p>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+// comprador.html — versión placeholder (Tanda 2).
+// Re-valida la llave en cada carga; si no es válida, vuelve al index
+// que muestra el aviso de contacto correspondiente.
+import { validarLlave, fmtFecha } from "./interno/utils.js";
+
+const params = new URLSearchParams(window.location.search);
+const codigo = params.get("llave");
+
+(async () => {
+  const r = await validarLlave(codigo);
+  if (!r.ok) {
+    window.location.href = "./" + (codigo ? "?llave=" + encodeURIComponent(codigo) : "");
+    return;
+  }
+  const d = r.datos;
+  document.getElementById("saludoComprador").textContent =
+    "Hola, " + (d.nombre || "") + " 👋";
+  document.getElementById("infoVence").textContent =
+    "Tu acceso vence el " + fmtFecha(d.venceEn) + ".";
+  const cats = Array.isArray(d.categorias) ? d.categorias : [];
+  document.getElementById("infoCategorias").textContent =
+    cats.length === 0
+      ? "Tenés acceso a todas las categorías del catálogo."
+      : "Tenés acceso a " + cats.length + " categoría(s) del catálogo.";
+  document.getElementById("vistaCargando").style.display = "none";
+  document.getElementById("vistaCatalogo").style.display = "block";
+})();
+</script>
+</body>
+</html>

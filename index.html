@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>remateTaller — Acceso</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+<link rel="stylesheet" href="interno/design-system.css">
+</head>
+<body>
+
+<div class="login-wrap">
+  <div class="login-card centrado">
+    <div class="brand"><span class="material-icons">gavel</span><span>remateTaller</span></div>
+
+    <!-- Estado: verificando -->
+    <div id="vistaCargando">
+      <p class="texto-suave">Verificando acceso…</p>
+    </div>
+
+    <!-- Estado: pedir código manualmente -->
+    <div id="vistaCodigo" style="display:none;">
+      <p class="texto-suave" id="txtBienvenida">
+        Ingresá el código de acceso que recibiste.
+      </p>
+      <label for="inpCodigo" style="text-align:left;">Código de acceso</label>
+      <input type="text" id="inpCodigo" autocapitalize="characters"
+             autocomplete="off" spellcheck="false" maxlength="12"
+             style="text-transform:uppercase; text-align:center; letter-spacing:3px; font-weight:700;">
+      <button class="btn" id="btnValidar">
+        <span class="material-icons">key</span> Entrar
+      </button>
+      <p id="msgCodigo" class="texto-suave" style="color:var(--c-error); display:none; margin-top:12px;"></p>
+    </div>
+
+    <!-- Estado: sin acceso / vencido → contacto WhatsApp -->
+    <div id="vistaContacto" style="display:none;">
+      <span class="material-icons" style="font-size:44px; color:var(--c-aviso);">schedule</span>
+      <p id="txtContacto" style="font-size:17px; line-height:1.5;"></p>
+      <a class="btn" id="btnWhatsapp" href="#" target="_blank" rel="noopener">
+        <span class="material-icons">chat</span> Escribir por WhatsApp
+      </a>
+      <p class="texto-suave" style="margin-top:14px;">
+        <a href="./" style="color:var(--c-texto-suave);">Probar con otro código</a>
+      </p>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { validarLlave, leerConfigPublico, fmtFecha } from "./interno/utils.js";
+
+const V = {
+  cargando: document.getElementById("vistaCargando"),
+  codigo: document.getElementById("vistaCodigo"),
+  contacto: document.getElementById("vistaContacto")
+};
+
+let config = {};
+
+function mostrar(vista) {
+  Object.keys(V).forEach((k) => { V[k].style.display = k === vista ? "block" : "none"; });
+}
+
+function irAlCatalogo(codigo) {
+  window.location.href = "comprador.html?llave=" + encodeURIComponent(codigo);
+}
+
+function mostrarContacto(motivo) {
+  // Textos y teléfono editables por los admins en Configuración.
+  const nombre = config.nombreContacto || "Florencia";
+  const tel = String(config.telefonoWhatsapp || "").replace(/\D/g, "");
+  let texto;
+
+  if (motivo === "vencida") {
+    texto = config.mensajeVencido ||
+      ("Tu acceso venció. Escribile por WhatsApp a " + nombre + " para renovar tu invitación.");
+  } else if (motivo === "revocada") {
+    texto = "Este acceso ya no está disponible. Escribile por WhatsApp a " + nombre + " para coordinar.";
+  } else {
+    texto = config.mensajeSinLlave ||
+      ("Este catálogo es solo por invitación. Escribile por WhatsApp a " + nombre + " para pedir tu acceso.");
+  }
+
+  document.getElementById("txtContacto").textContent = texto;
+
+  const btn = document.getElementById("btnWhatsapp");
+  if (tel) {
+    const msg = encodeURIComponent(config.mensajePrecargado || "Hola! Quisiera acceso al catálogo de remateTaller.");
+    btn.href = "https://wa.me/" + tel + "?text=" + msg;
+    btn.style.display = "inline-flex";
+  } else {
+    btn.style.display = "none";
+  }
+  mostrar("contacto");
+}
+
+async function procesar(codigo) {
+  mostrar("cargando");
+  const r = await validarLlave(codigo);
+  if (r.ok) { irAlCatalogo(String(codigo).trim().toUpperCase()); return; }
+  if (r.motivo === "vencida" || r.motivo === "revocada") { mostrarContacto(r.motivo); return; }
+  if (r.motivo === "inexistente" || r.motivo === "error") {
+    if (llegóPorLink) { mostrarContacto("sin-llave"); return; }
+    document.getElementById("msgCodigo").textContent = "Código no válido. Revisalo e intentá de nuevo.";
+    document.getElementById("msgCodigo").style.display = "block";
+    mostrar("codigo");
+  }
+}
+
+// ---- Arranque ----
+const params = new URLSearchParams(window.location.search);
+const llaveUrl = params.get("llave");
+const llegóPorLink = !!llaveUrl;
+
+(async () => {
+  config = await leerConfigPublico();
+  if (config.mensajeBienvenida) {
+    document.getElementById("txtBienvenida").textContent = config.mensajeBienvenida;
+  }
+  if (llaveUrl) {
+    procesar(llaveUrl);
+  } else {
+    mostrar("codigo");
+  }
+})();
+
+document.getElementById("btnValidar").addEventListener("click", () => {
+  const c = document.getElementById("inpCodigo").value;
+  if (c.trim()) procesar(c);
+});
+document.getElementById("inpCodigo").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("btnValidar").click();
+});
+</script>
+</body>
+</html>
