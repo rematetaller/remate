@@ -47,12 +47,26 @@
   <button class="btn" id="btnGuardar">
     <span class="material-icons">save</span> Guardar configuración
   </button>
+
+  <!-- ============ Usuarios administradores ============ -->
+  <h2>Usuarios administradores</h2>
+  <div id="listaUsuarios"><p class="texto-suave">Cargando…</p></div>
+  <div class="card">
+    <p class="texto-suave" style="margin:0;">
+      <span class="material-icons" style="font-size:16px; vertical-align:middle;">info</span>
+      Para sumar un usuario nuevo: crearlo en la consola de Firebase
+      (Authentication → Agregar usuario) y pasarle el <strong>uid</strong> al
+      desarrollo para incorporarlo al sistema. Desactivar un usuario le corta
+      el acceso de inmediato.
+    </p>
+  </div>
 </main>
 
 <script type="module">
 import {
   verificarAuth, renderNav, db, toast,
-  doc, getDoc, setDoc, serverTimestamp, soloDigitos
+  doc, getDoc, setDoc, updateDoc, collection, getDocs,
+  serverTimestamp, soloDigitos, fmtFecha
 } from "./utils.js";
 
 let uidActual = null;
@@ -61,8 +75,10 @@ verificarAuth(async (user) => {
   uidActual = user.uid;
   renderNav("configuracion");
   await cargar();
+  await cargarUsuarios();
 });
 
+// ---------- Config pública ----------
 async function cargar() {
   try {
     const snap = await getDoc(doc(db, "config", "publico"));
@@ -104,6 +120,67 @@ document.getElementById("btnGuardar").addEventListener("click", async () => {
   }
   btn.disabled = false;
 });
+
+// ---------- Usuarios ----------
+async function cargarUsuarios() {
+  const cont = document.getElementById("listaUsuarios");
+  try {
+    const snap = await getDocs(collection(db, "usuarios"));
+    if (snap.empty) {
+      cont.innerHTML = '<p class="texto-suave">Sin usuarios registrados aún (se crean en el primer login).</p>';
+      return;
+    }
+    let html = "";
+    snap.forEach((d) => {
+      const u = d.data();
+      const esYo = d.id === uidActual;
+      const badge = u.activo === false
+        ? '<span class="badge error">Inactivo</span>'
+        : '<span class="badge ok">Activo</span>';
+      html += `<div class="card">
+        <div class="fila" style="justify-content:space-between;">
+          <strong>${u.nombre || "—"}${esYo ? " (vos)" : ""}</strong> ${badge}
+        </div>
+        <p class="texto-suave" style="margin:6px 0;">${u.email || "—"} · rol: ${u.rol || "admin"} ·
+        desde ${fmtFecha(u.creadoEn)}</p>
+        <label for="nom-${d.id}">Nombre</label>
+        <input type="text" id="nom-${d.id}" value="${u.nombre || ""}">
+        <div class="fila">
+          <button class="btn secundario btnGuardarUsr" data-uid="${d.id}">
+            <span class="material-icons">save</span> Guardar</button>
+          ${esYo ? "" : `<button class="btn ${u.activo === false ? "" : "peligro"} btnToggleUsr"
+            data-uid="${d.id}" data-activo="${u.activo === false ? "0" : "1"}">
+            <span class="material-icons">${u.activo === false ? "person_add" : "person_off"}</span>
+            ${u.activo === false ? "Reactivar" : "Desactivar"}</button>`}
+        </div>
+      </div>`;
+    });
+    cont.innerHTML = html;
+
+    cont.querySelectorAll(".btnGuardarUsr").forEach((b) => {
+      b.addEventListener("click", async () => {
+        const nombre = document.getElementById("nom-" + b.dataset.uid).value.trim();
+        if (!nombre) { toast("El nombre no puede quedar vacío.", "error"); return; }
+        await updateDoc(doc(db, "usuarios", b.dataset.uid), { nombre });
+        toast("Usuario actualizado.", "ok");
+        cargarUsuarios();
+      });
+    });
+
+    cont.querySelectorAll(".btnToggleUsr").forEach((b) => {
+      b.addEventListener("click", async () => {
+        const activar = b.dataset.activo === "0";
+        if (!activar && !confirm("¿Desactivar este usuario? Perderá el acceso al panel.")) return;
+        await updateDoc(doc(db, "usuarios", b.dataset.uid), { activo: activar });
+        toast(activar ? "Usuario reactivado." : "Usuario desactivado.", "ok");
+        cargarUsuarios();
+      });
+    });
+  } catch (e) {
+    console.error(e);
+    cont.innerHTML = '<p class="texto-suave">Error cargando los usuarios.</p>';
+  }
+}
 </script>
 </body>
 </html>

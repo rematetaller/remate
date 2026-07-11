@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ventas — remateTaller</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+<link rel="stylesheet" href="design-system.css">
+<style>
+details summary { cursor:pointer; list-style:none; }
+details summary::-webkit-details-marker { display:none; }
+.item-fila { border-top:1px solid var(--c-borde); padding:8px 0; font-size:14px; }
+</style>
+</head>
+<body>
+
+<header id="topbar"></header>
+
+<main>
+  <h1>Ventas</h1>
+
+  <div class="kpis">
+    <div class="kpi"><div class="num" id="kpiCant">—</div><div class="lbl">Ventas</div></div>
+    <div class="kpi"><div class="num" id="kpiUYU" style="font-size:18px;">—</div><div class="lbl">Total UYU</div></div>
+    <div class="kpi"><div class="num" id="kpiUSD" style="font-size:18px;">—</div><div class="lbl">Total USD</div></div>
+  </div>
+
+  <input type="text" id="filtroTexto" placeholder="Buscar por comprador o artículo…" style="margin-bottom:10px;">
+  <div id="lista"><p class="texto-suave">Cargando…</p></div>
+</main>
+
+<script type="module">
+import {
+  verificarAuth, renderNav, db, fmtMoneda, fmtFecha,
+  collection, getDocs, query, orderBy
+} from "./utils.js";
+
+let ventas = [];
+
+verificarAuth(async () => {
+  renderNav("ventas");
+  const snap = await getDocs(query(collection(db, "ventas"), orderBy("fecha", "desc")));
+  ventas = [];
+  snap.forEach((d) => ventas.push({ id: d.id, ...d.data() }));
+  kpis();
+  render();
+});
+
+document.getElementById("filtroTexto").addEventListener("input", render);
+
+function kpis() {
+  let uyu = 0, usd = 0;
+  ventas.forEach((v) => {
+    uyu += Number((v.totales && v.totales.UYU) || 0);
+    usd += Number((v.totales && v.totales.USD) || 0);
+  });
+  document.getElementById("kpiCant").textContent = ventas.length;
+  document.getElementById("kpiUYU").textContent = fmtMoneda(uyu, "UYU");
+  document.getElementById("kpiUSD").textContent = fmtMoneda(usd, "USD");
+}
+
+function render() {
+  const f = document.getElementById("filtroTexto").value.trim().toLowerCase();
+  const cont = document.getElementById("lista");
+
+  const lista = ventas.filter((v) => {
+    if (!f) return true;
+    const enComprador = ((v.comprador && v.comprador.nombre) || "").toLowerCase().includes(f);
+    const enItems = (v.items || []).some((it) => (it.descripcion || "").toLowerCase().includes(f));
+    return enComprador || enItems;
+  });
+
+  if (lista.length === 0) {
+    cont.innerHTML = '<p class="texto-suave">No hay ventas registradas todavía.</p>';
+    return;
+  }
+
+  cont.innerHTML = lista.map((v) => {
+    const partes = [];
+    if (v.totales && v.totales.UYU > 0) partes.push(fmtMoneda(v.totales.UYU, "UYU"));
+    if (v.totales && v.totales.USD > 0) partes.push(fmtMoneda(v.totales.USD, "USD"));
+
+    const itemsHtml = (v.items || []).map((it) =>
+      `<div class="item-fila">${it.descripcion} ${it.esLote ? "(LOTE, " + it.cantidad + " u.)" : "× " + it.cantidad}
+       — <strong>${fmtMoneda(it.precioFinal, it.moneda)}</strong></div>`
+    ).join("");
+
+    return `<div class="card"><details>
+      <summary>
+        <div class="fila" style="justify-content:space-between;">
+          <strong>${(v.comprador && v.comprador.nombre) || "—"}</strong>
+          <strong style="color:var(--c-primario);">${partes.join(" + ") || "—"}</strong>
+        </div>
+        <span class="texto-suave">${fmtFecha(v.fecha)} · vendió ${v.vendedorNombre || "—"} ·
+        ${(v.items || []).length} ítem(s) · Tel: ${(v.comprador && v.comprador.telefono) || "—"}</span>
+      </summary>
+      ${itemsHtml}
+    </details></div>`;
+  }).join("");
+}
+</script>
+</body>
+</html>

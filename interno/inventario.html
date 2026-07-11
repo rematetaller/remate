@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventario — remateTaller</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+<link rel="stylesheet" href="design-system.css">
+<style>
+.thumb { width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid var(--c-borde); }
+.thumbs { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+.thumb-wrap { position:relative; }
+.thumb-x { position:absolute; top:-6px; right:-6px; background:var(--c-error); color:#fff;
+  border-radius:50%; width:20px; height:20px; font-size:13px; line-height:20px; text-align:center; }
+.chip { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px;
+  border:1px solid var(--c-borde); background:var(--c-superficie); margin:4px 4px 0 0; font-size:14px; }
+.chip.inactiva { opacity:0.45; text-decoration:line-through; }
+.prod-foto { width:72px; height:72px; object-fit:cover; border-radius:8px; flex:none; }
+</style>
+</head>
+<body>
+
+<header id="topbar"></header>
+
+<main>
+  <h1>Inventario</h1>
+
+  <!-- ============ Categorías ============ -->
+  <div class="card">
+    <h2 style="margin-top:0;">Categorías</h2>
+    <div class="fila">
+      <input type="text" id="inpNuevaCat" placeholder="Nueva categoría…">
+      <button class="btn" id="btnAgregarCat" style="margin-top:0; flex:none; width:auto;">
+        <span class="material-icons">add</span>
+      </button>
+    </div>
+    <div id="listaCats" class="texto-suave" style="margin-top:10px;">Cargando…</div>
+    <p class="texto-suave" style="font-size:12px;">
+      Tocá una categoría para activarla/desactivarla. Mantené presionado ✏️ para renombrar.
+    </p>
+  </div>
+
+  <!-- ============ Formulario de producto ============ -->
+  <div class="card" id="cardForm">
+    <h2 style="margin-top:0;" id="tituloForm">Nuevo producto</h2>
+
+    <label for="pDescripcion">Descripción</label>
+    <input type="text" id="pDescripcion" autocomplete="off">
+
+    <label for="pCategoria">Categoría</label>
+    <select id="pCategoria"></select>
+
+    <div class="fila">
+      <div>
+        <label for="pCantidad">Cantidad (stock)</label>
+        <input type="number" id="pCantidad" inputmode="numeric" min="0" value="1">
+      </div>
+      <div>
+        <label for="pUbicacion">Ubicación en depósito</label>
+        <input type="text" id="pUbicacion" placeholder="Ej: Estante B3" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="fila">
+      <div>
+        <label for="pMoneda">Moneda</label>
+        <select id="pMoneda">
+          <option value="UYU">$ Pesos UYU</option>
+          <option value="USD">US$ Dólares</option>
+        </select>
+      </div>
+      <div>
+        <label for="pPrecio">Precio unitario sugerido</label>
+        <input type="number" id="pPrecio" inputmode="decimal" min="0">
+      </div>
+    </div>
+
+    <label for="pPrecioLote">Precio especial por lote completo (opcional)</label>
+    <input type="number" id="pPrecioLote" inputmode="decimal" min="0" placeholder="Dejar vacío si no aplica">
+
+    <label>Fotos</label>
+    <input type="file" id="pFotos" accept="image/*" multiple>
+    <div class="thumbs" id="thumbs"></div>
+    <p class="texto-suave" id="estadoFotos" style="display:none;"></p>
+
+    <button class="btn" id="btnGuardar">
+      <span class="material-icons">save</span> Guardar producto
+    </button>
+    <button class="btn secundario" id="btnCancelarEdicion" style="display:none;">
+      Cancelar edición
+    </button>
+  </div>
+
+  <!-- ============ Listado ============ -->
+  <h2>Productos</h2>
+  <div class="fila" style="margin-bottom:10px;">
+    <select id="filtroCat"><option value="">Todas las categorías</option></select>
+    <input type="text" id="filtroTexto" placeholder="Buscar…">
+  </div>
+  <div id="listaProductos"><p class="texto-suave">Cargando…</p></div>
+</main>
+
+<script type="module">
+import {
+  verificarAuth, renderNav, db, toast, subirFoto, fmtMoneda,
+  doc, setDoc, addDoc, updateDoc, deleteDoc, collection, getDocs,
+  query, orderBy, serverTimestamp
+} from "./utils.js";
+
+let cats = [];        // [{id, nombre, activa}]
+let productos = [];   // [{id, ...datos}]
+let fotos = [];       // urls del producto en edición
+let editandoId = null;
+
+verificarAuth(async () => {
+  renderNav("inventario");
+  await cargarCategorias();
+  await cargarProductos();
+});
+
+// ================= Categorías =================
+async function cargarCategorias() {
+  const snap = await getDocs(query(collection(db, "categorias"), orderBy("nombre")));
+  cats = [];
+  snap.forEach((d) => cats.push({ id: d.id, ...d.data() }));
+  renderCats();
+  renderSelectsCat();
+}
+
+function renderCats() {
+  const cont = document.getElementById("listaCats");
+  if (cats.length === 0) {
+    cont.innerHTML = '<span class="badge neutro">Sin categorías aún</span>';
+    return;
+  }
+  cont.innerHTML = cats.map((c) =>
+    `<span class="chip ${c.activa === false ? "inactiva" : ""}" data-id="${c.id}">
+       ${c.nombre} <span class="material-icons btnRenombrar" data-id="${c.id}" style="font-size:15px;">edit</span>
+     </span>`
+  ).join("");
+  cont.querySelectorAll(".chip").forEach((ch) => {
+    ch.addEventListener("click", async (e) => {
+      if (e.target.classList.contains("btnRenombrar")) return;
+      const c = cats.find((x) => x.id === ch.dataset.id);
+      await updateDoc(doc(db, "categorias", c.id), { activa: c.activa === false });
+      cargarCategorias();
+    });
+  });
+  cont.querySelectorAll(".btnRenombrar").forEach((b) => {
+    b.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const c = cats.find((x) => x.id === b.dataset.id);
+      const nuevo = prompt("Nuevo nombre:", c.nombre);
+      if (nuevo && nuevo.trim()) {
+        await updateDoc(doc(db, "categorias", c.id), { nombre: nuevo.trim() });
+        cargarCategorias();
+        cargarProductos();
+      }
+    });
+  });
+}
+
+function renderSelectsCat() {
+  const activas = cats.filter((c) => c.activa !== false);
+  document.getElementById("pCategoria").innerHTML =
+    activas.map((c) => `<option value="${c.id}">${c.nombre}</option>`).join("");
+  document.getElementById("filtroCat").innerHTML =
+    '<option value="">Todas las categorías</option>' +
+    cats.map((c) => `<option value="${c.id}">${c.nombre}</option>`).join("");
+}
+
+document.getElementById("btnAgregarCat").addEventListener("click", async () => {
+  const nombre = document.getElementById("inpNuevaCat").value.trim();
+  if (!nombre) return;
+  await addDoc(collection(db, "categorias"), { nombre, activa: true, creadaEn: serverTimestamp() });
+  document.getElementById("inpNuevaCat").value = "";
+  toast("Categoría agregada.", "ok");
+  cargarCategorias();
+});
+
+// ================= Fotos =================
+document.getElementById("pFotos").addEventListener("change", async (e) => {
+  const files = Array.from(e.target.files || []);
+  if (files.length === 0) return;
+  const estado = document.getElementById("estadoFotos");
+  estado.style.display = "block";
+  for (let i = 0; i < files.length; i++) {
+    estado.textContent = "Subiendo foto " + (i + 1) + " de " + files.length + "…";
+    try {
+      const url = await subirFoto(files[i], "productos");
+      fotos.push(url);
+      renderThumbs();
+    } catch (err) {
+      console.error(err);
+      toast("Error subiendo una foto.", "error");
+    }
+  }
+  estado.style.display = "none";
+  e.target.value = "";
+});
+
+function renderThumbs() {
+  document.getElementById("thumbs").innerHTML = fotos.map((u, i) =>
+    `<div class="thumb-wrap"><img class="thumb" src="${u}">
+     <div class="thumb-x" data-i="${i}">×</div></div>`
+  ).join("");
+  document.querySelectorAll(".thumb-x").forEach((x) => {
+    x.addEventListener("click", () => { fotos.splice(Number(x.dataset.i), 1); renderThumbs(); });
+  });
+}
+
+// ================= Guardar producto =================
+document.getElementById("btnGuardar").addEventListener("click", async () => {
+  const descripcion = document.getElementById("pDescripcion").value.trim();
+  const categoriaId = document.getElementById("pCategoria").value;
+  const cantidad = Number(document.getElementById("pCantidad").value);
+  const precioSugerido = Number(document.getElementById("pPrecio").value);
+  const precioLoteRaw = document.getElementById("pPrecioLote").value;
+
+  if (!descripcion) { toast("Cargá la descripción.", "error"); return; }
+  if (!categoriaId) { toast("Creá y elegí una categoría.", "error"); return; }
+  if (!(precioSugerido > 0)) { toast("Cargá el precio unitario.", "error"); return; }
+  if (!(cantidad >= 0)) { toast("Cantidad inválida.", "error"); return; }
+
+  const datos = {
+    descripcion,
+    categoriaId,
+    cantidad,
+    ubicacion: document.getElementById("pUbicacion").value.trim(),
+    moneda: document.getElementById("pMoneda").value,
+    precioSugerido,
+    precioLote: precioLoteRaw === "" ? null : Number(precioLoteRaw),
+    fotos: fotos.slice(),
+    estado: cantidad > 0 ? "disponible" : "agotado",
+    actualizadoEn: serverTimestamp()
+  };
+
+  const btn = document.getElementById("btnGuardar");
+  btn.disabled = true;
+  try {
+    if (editandoId) {
+      await updateDoc(doc(db, "productos", editandoId), datos);
+      toast("Producto actualizado.", "ok");
+    } else {
+      datos.creadoEn = serverTimestamp();
+      await addDoc(collection(db, "productos"), datos);
+      toast("Producto agregado.", "ok");
+    }
+    limpiarForm();
+    cargarProductos();
+  } catch (e) {
+    console.error(e);
+    toast("No se pudo guardar.", "error");
+  }
+  btn.disabled = false;
+});
+
+function limpiarForm() {
+  editandoId = null;
+  fotos = [];
+  renderThumbs();
+  ["pDescripcion", "pUbicacion", "pPrecio", "pPrecioLote"].forEach((id) => document.getElementById(id).value = "");
+  document.getElementById("pCantidad").value = "1";
+  document.getElementById("tituloForm").textContent = "Nuevo producto";
+  document.getElementById("btnCancelarEdicion").style.display = "none";
+}
+document.getElementById("btnCancelarEdicion").addEventListener("click", limpiarForm);
+
+// ================= Listado =================
+async function cargarProductos() {
+  const snap = await getDocs(query(collection(db, "productos"), orderBy("descripcion")));
+  productos = [];
+  snap.forEach((d) => productos.push({ id: d.id, ...d.data() }));
+  renderProductos();
+}
+
+document.getElementById("filtroCat").addEventListener("change", renderProductos);
+document.getElementById("filtroTexto").addEventListener("input", renderProductos);
+
+function nombreCat(id) {
+  const c = cats.find((x) => x.id === id);
+  return c ? c.nombre : "—";
+}
+
+function renderProductos() {
+  const fCat = document.getElementById("filtroCat").value;
+  const fTxt = document.getElementById("filtroTexto").value.trim().toLowerCase();
+  const cont = document.getElementById("listaProductos");
+
+  const lista = productos.filter((p) =>
+    (!fCat || p.categoriaId === fCat) &&
+    (!fTxt || (p.descripcion || "").toLowerCase().includes(fTxt))
+  );
+  if (lista.length === 0) {
+    cont.innerHTML = '<p class="texto-suave">No hay productos para mostrar.</p>';
+    return;
+  }
+  cont.innerHTML = lista.map((p) => {
+    const foto = (p.fotos && p.fotos[0])
+      ? `<img class="prod-foto" src="${p.fotos[0]}">`
+      : `<span class="material-icons prod-foto" style="font-size:40px; color:var(--c-borde); text-align:center; line-height:72px;">image</span>`;
+    const badge = p.cantidad > 0
+      ? `<span class="badge ok">${p.cantidad} en stock</span>`
+      : '<span class="badge error">Agotado</span>';
+    const lote = p.precioLote ? " · Lote: " + fmtMoneda(p.precioLote, p.moneda) : "";
+    return `<div class="card"><div class="fila" style="align-items:flex-start;">
+      ${foto}
+      <div style="flex:1;">
+        <strong>${p.descripcion}</strong> ${badge}<br>
+        <span class="texto-suave">${nombreCat(p.categoriaId)} · ${p.ubicacion || "sin ubicación"}<br>
+        ${fmtMoneda(p.precioSugerido, p.moneda)} c/u${lote}</span>
+      </div></div>
+      <div class="fila">
+        <button class="btn secundario btnEditar" data-id="${p.id}" style="margin-top:8px;">
+          <span class="material-icons">edit</span> Editar</button>
+        <button class="btn peligro btnBorrar" data-id="${p.id}" style="margin-top:8px;">
+          <span class="material-icons">delete</span></button>
+      </div></div>`;
+  }).join("");
+
+  cont.querySelectorAll(".btnEditar").forEach((b) => {
+    b.addEventListener("click", () => {
+      const p = productos.find((x) => x.id === b.dataset.id);
+      editandoId = p.id;
+      fotos = (p.fotos || []).slice();
+      renderThumbs();
+      document.getElementById("pDescripcion").value = p.descripcion || "";
+      document.getElementById("pCategoria").value = p.categoriaId || "";
+      document.getElementById("pCantidad").value = p.cantidad != null ? p.cantidad : 0;
+      document.getElementById("pUbicacion").value = p.ubicacion || "";
+      document.getElementById("pMoneda").value = p.moneda || "UYU";
+      document.getElementById("pPrecio").value = p.precioSugerido != null ? p.precioSugerido : "";
+      document.getElementById("pPrecioLote").value = p.precioLote != null ? p.precioLote : "";
+      document.getElementById("tituloForm").textContent = "Editando producto";
+      document.getElementById("btnCancelarEdicion").style.display = "block";
+      document.getElementById("cardForm").scrollIntoView({ behavior: "smooth" });
+    });
+  });
+  cont.querySelectorAll(".btnBorrar").forEach((b) => {
+    b.addEventListener("click", async () => {
+      if (!confirm("¿Eliminar este producto? No se puede deshacer.")) return;
+      await deleteDoc(doc(db, "productos", b.dataset.id));
+      toast("Producto eliminado.", "ok");
+      cargarProductos();
+    });
+  });
+}
+</script>
+</body>
+</html>

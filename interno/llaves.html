@@ -6,6 +6,11 @@
 <title>Llaves — remateTaller</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
 <link rel="stylesheet" href="design-system.css">
+<style>
+details summary { cursor:pointer; list-style:none; }
+details summary::-webkit-details-marker { display:none; }
+.compra-fila { border-top:1px solid var(--c-borde); padding:8px 0; font-size:14px; }
+</style>
 </head>
 <body>
 
@@ -55,8 +60,9 @@
     </div>
   </div>
 
-  <!-- ============ Listado ============ -->
-  <h2>Llaves generadas</h2>
+  <!-- ============ Listado (compradores + histórico) ============ -->
+  <h2>Compradores y llaves</h2>
+  <p class="texto-suave">Cada tarjeta muestra la llave y el historial de compras del comprador, la más reciente primero.</p>
   <div id="listaLlaves"><p class="texto-suave">Cargando…</p></div>
 </main>
 
@@ -65,16 +71,18 @@ import {
   verificarAuth, renderNav, db, toast,
   doc, setDoc, updateDoc, collection, getDocs, query, orderBy,
   serverTimestamp, generarCodigoLlave, urlBasePublica,
-  fmtFecha, tsAms, soloDigitos
+  fmtFecha, fmtMoneda, tsAms, soloDigitos
 } from "./utils.js";
 
 let uidActual = null;
-let categorias = []; // [{id, nombre}]
+let categorias = [];
+let ventasPorLlave = {};   // llaveCodigo → [ventas ordenadas desc]
 
 verificarAuth(async (user) => {
   uidActual = user.uid;
   renderNav("llaves");
   await cargarCategorias();
+  await cargarVentas();
   await cargarLlaves();
 });
 
@@ -114,6 +122,20 @@ async function cargarCategorias() {
   });
 }
 
+// ---------- Ventas (historial por comprador) ----------
+async function cargarVentas() {
+  ventasPorLlave = {};
+  try {
+    const snap = await getDocs(query(collection(db, "ventas"), orderBy("fecha", "desc")));
+    snap.forEach((d) => {
+      const v = d.data();
+      const k = v.llaveCodigo || "_sin_llave";
+      if (!ventasPorLlave[k]) ventasPorLlave[k] = [];
+      ventasPorLlave[k].push(v);
+    });
+  } catch (e) { console.error(e); }
+}
+
 // ---------- Crear ----------
 document.getElementById("btnCrear").addEventListener("click", async () => {
   const nombre = document.getElementById("inpNombre").value.trim();
@@ -126,7 +148,7 @@ document.getElementById("btnCrear").addEventListener("click", async () => {
   const chkTodas = document.getElementById("chkTodas");
   let cats = [];
   if (!chkTodas || chkTodas.checked) {
-    cats = []; // vacío = acceso a todo
+    cats = [];
   } else {
     document.querySelectorAll(".chkCat:checked").forEach((ch) => cats.push(ch.value));
     if (cats.length === 0) { toast("Elegí al menos una categoría o marcá Todas.", "error"); return; }
@@ -138,13 +160,9 @@ document.getElementById("btnCrear").addEventListener("click", async () => {
     const codigo = generarCodigoLlave();
     const vence = new Date(Date.now() + dias * 24 * 60 * 60 * 1000);
     await setDoc(doc(db, "llaves", codigo), {
-      nombre: nombre,
-      telefono: telefono,
-      categorias: cats,
-      creadaEn: serverTimestamp(),
-      venceEn: vence,
-      revocada: false,
-      creadaPor: uidActual
+      nombre, telefono, categorias: cats,
+      creadaEn: serverTimestamp(), venceEn: vence,
+      revocada: false, creadaPor: uidActual
     });
     mostrarNueva(codigo, nombre, telefono, vence);
     document.getElementById("inpNombre").value = "";
@@ -199,11 +217,36 @@ async function cargarLlaves() {
         ? l.categorias.length + " categoría(s)"
         : "todo el catálogo";
 
+      // Historial de compras de este comprador (más recientes primero)
+      const compras = ventasPorLlave[d.id] || [];
+      let historial;
+      if (compras.length === 0) {
+        historial = '<p class="texto-suave" style="margin:8px 0 0;">Sin compras registradas.</p>';
+      } else {
+        historial = '<details style="margin-top:8px;"><summary><span class="badge ok">🧾 ' +
+          compras.length + " compra(s) — ver detalle</span></summary>";
+        compras.forEach((v) => {
+          const partes = [];
+          if (v.totales && v.totales.UYU > 0) partes.push(fmtMoneda(v.totales.UYU, "UYU"));
+          if (v.totales && v.totales.USD > 0) partes.push(fmtMoneda(v.totales.USD, "USD"));
+          historial += '<div class="compra-fila"><strong>' + fmtFecha(v.fecha) + " — " +
+            (partes.join(" + ") || "—") + "</strong> · vendió " + (v.vendedorNombre || "—");
+          (v.items || []).forEach((it) => {
+            historial += "<br>· " + it.descripcion +
+              (it.esLote ? " (LOTE, " + it.cantidad + " u.)" : " × " + it.cantidad) +
+              " — " + fmtMoneda(it.precioFinal, it.moneda);
+          });
+          historial += "</div>";
+        });
+        historial += "</details>";
+      }
+
       html += '<div class="card">' +
         '<div class="fila" style="justify-content:space-between;">' +
         "<strong>" + (l.nombre || "—") + "</strong>" + badge + "</div>" +
         '<p class="texto-suave" style="margin:6px 0;">Código: <strong>' + d.id + "</strong> · Tel: " +
-        (l.telefono || "—") + "<br>Vence: " + fmtFecha(l.venceEn) + " · Acceso: " + catsTxt + "</p>";
+        (l.telefono || "—") + "<br>Vence: " + fmtFecha(l.venceEn) + " · Acceso: " + catsTxt + "</p>" +
+        historial;
 
       if (!l.revocada && venceMs > ahora) {
         html += '<div class="fila">' +
