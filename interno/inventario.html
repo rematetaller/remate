@@ -36,7 +36,8 @@
     </div>
     <div id="listaCats" class="texto-suave" style="margin-top:10px;">Cargando…</div>
     <p class="texto-suave" style="font-size:12px;">
-      Tocá una categoría para activarla/desactivarla. Mantené presionado ✏️ para renombrar.
+      Tocá una categoría para activarla/desactivarla. ✏️ renombra, 🗑️ elimina
+      (solo si no tiene productos).
     </p>
   </div>
 
@@ -113,7 +114,7 @@
 import {
   verificarAuth, renderNav, db, toast, subirFoto, fmtMoneda,
   doc, setDoc, addDoc, updateDoc, deleteDoc, collection, getDocs,
-  query, orderBy, serverTimestamp
+  query, where, orderBy, serverTimestamp, getCountFromServer
 } from "./utils.js";
 
 let cats = [];        // [{id, nombre, activa}]
@@ -145,11 +146,13 @@ function renderCats() {
   cont.innerHTML = cats.map((c) =>
     `<span class="chip ${c.activa === false ? "inactiva" : ""}" data-id="${c.id}">
        ${c.nombre} <span class="material-icons btnRenombrar" data-id="${c.id}" style="font-size:15px;">edit</span>
+       <span class="material-icons btnBorrarCat" data-id="${c.id}" style="font-size:15px; color:var(--c-error);">delete</span>
      </span>`
   ).join("");
   cont.querySelectorAll(".chip").forEach((ch) => {
     ch.addEventListener("click", async (e) => {
-      if (e.target.classList.contains("btnRenombrar")) return;
+      if (e.target.classList.contains("btnRenombrar") ||
+          e.target.classList.contains("btnBorrarCat")) return;
       const c = cats.find((x) => x.id === ch.dataset.id);
       await updateDoc(doc(db, "categorias", c.id), { activa: c.activa === false });
       cargarCategorias();
@@ -164,6 +167,28 @@ function renderCats() {
         await updateDoc(doc(db, "categorias", c.id), { nombre: nuevo.trim() });
         cargarCategorias();
         cargarProductos();
+      }
+    });
+  });
+  cont.querySelectorAll(".btnBorrarCat").forEach((b) => {
+    b.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const c = cats.find((x) => x.id === b.dataset.id);
+      try {
+        // Se elimina solo si NO tiene productos (evita productos huérfanos).
+        const q = query(collection(db, "productos"), where("categoriaId", "==", c.id));
+        const cuenta = (await getCountFromServer(q)).data().count;
+        if (cuenta > 0) {
+          toast(`"${c.nombre}" tiene ${cuenta} producto(s). Reasignalos o desactivá la categoría.`, "error");
+          return;
+        }
+        if (!confirm(`¿Eliminar la categoría "${c.nombre}"? No se puede deshacer.`)) return;
+        await deleteDoc(doc(db, "categorias", c.id));
+        toast("Categoría eliminada.", "ok");
+        cargarCategorias();
+      } catch (err) {
+        console.error(err);
+        toast("No se pudo eliminar la categoría.", "error");
       }
     });
   });
@@ -212,7 +237,7 @@ async function procesarFotos(e) {
       renderThumbs();
     } catch (err) {
       console.error(err);
-      toast("Error subiendo una foto.", "error");
+      toast(err.message || "Error subiendo una foto.", "error");
     }
   }
   estado.style.display = "none";

@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.1)
+// utils.js — Núcleo compartido de remateTaller (v1.3)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 // =====================================================
@@ -222,8 +222,15 @@ export async function subirFoto(file, carpeta, maxLado = 2000) {
     "https://api.cloudinary.com/v1_1/" + CLOUDINARY.cloud + "/image/upload",
     { method: "POST", body: fd }
   );
-  if (!res.ok) throw new Error("Error subiendo la foto (HTTP " + res.status + ")");
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    // Cloudinary devuelve la causa en data.error.message
+    // (ej: "Upload preset not found" → falta crear el preset unsigned).
+    const detalle = (data && data.error && data.error.message)
+      ? data.error.message
+      : "HTTP " + res.status;
+    throw new Error("Cloudinary: " + detalle);
+  }
   return data.secure_url;
 }
 
