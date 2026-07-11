@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Configuración — remateTaller</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+<link rel="stylesheet" href="design-system.css">
+</head>
+<body>
+
+<header id="topbar"></header>
+
+<main>
+  <h1>Configuración</h1>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Contacto público</h2>
+    <p class="texto-suave">
+      Estos datos se muestran a quienes entran sin llave, o con la llave vencida.
+    </p>
+
+    <label for="inpNombreContacto">Nombre de contacto</label>
+    <input type="text" id="inpNombreContacto" placeholder="Florencia">
+
+    <label for="inpTelefono">WhatsApp de contacto (con código de país, sin +)</label>
+    <input type="tel" id="inpTelefono" inputmode="numeric" placeholder="59899123456">
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Textos del acceso público</h2>
+    <p class="texto-suave">Si dejás un campo vacío, se usa el texto por defecto.</p>
+
+    <label for="txtBienvenida">Bienvenida (pantalla de ingreso de código)</label>
+    <textarea id="txtBienvenida" rows="2" placeholder="Ingresá el código de acceso que recibiste."></textarea>
+
+    <label for="txtVencido">Aviso de llave vencida</label>
+    <textarea id="txtVencido" rows="3" placeholder="Tu acceso venció. Escribile por WhatsApp a Florencia para renovar tu invitación."></textarea>
+
+    <label for="txtSinLlave">Aviso sin llave / código inexistente</label>
+    <textarea id="txtSinLlave" rows="3" placeholder="Este catálogo es solo por invitación. Escribile por WhatsApp a Florencia para pedir tu acceso."></textarea>
+
+    <label for="txtPrecargado">Mensaje precargado en WhatsApp (lo que el comprador envía al tocar el botón)</label>
+    <textarea id="txtPrecargado" rows="2" placeholder="Hola! Quisiera acceso al catálogo de remateTaller."></textarea>
+  </div>
+
+  <button class="btn" id="btnGuardar">
+    <span class="material-icons">save</span> Guardar configuración
+  </button>
+</main>
+
+<script type="module">
+import {
+  verificarAuth, renderNav, db, toast,
+  doc, getDoc, setDoc, serverTimestamp, soloDigitos
+} from "./utils.js";
+
+let uidActual = null;
+
+verificarAuth(async (user) => {
+  uidActual = user.uid;
+  renderNav("configuracion");
+  await cargar();
+});
+
+async function cargar() {
+  try {
+    const snap = await getDoc(doc(db, "config", "publico"));
+    if (!snap.exists()) return;
+    const c = snap.data();
+    document.getElementById("inpNombreContacto").value = c.nombreContacto || "";
+    document.getElementById("inpTelefono").value = c.telefonoWhatsapp || "";
+    document.getElementById("txtBienvenida").value = c.mensajeBienvenida || "";
+    document.getElementById("txtVencido").value = c.mensajeVencido || "";
+    document.getElementById("txtSinLlave").value = c.mensajeSinLlave || "";
+    document.getElementById("txtPrecargado").value = c.mensajePrecargado || "";
+  } catch (e) {
+    console.error(e);
+    toast("Error cargando la configuración.", "error");
+  }
+}
+
+document.getElementById("btnGuardar").addEventListener("click", async () => {
+  const tel = soloDigitos(document.getElementById("inpTelefono").value);
+  if (!tel) { toast("Cargá el WhatsApp de contacto.", "error"); return; }
+
+  const btn = document.getElementById("btnGuardar");
+  btn.disabled = true;
+  try {
+    await setDoc(doc(db, "config", "publico"), {
+      nombreContacto: document.getElementById("inpNombreContacto").value.trim(),
+      telefonoWhatsapp: tel,
+      mensajeBienvenida: document.getElementById("txtBienvenida").value.trim(),
+      mensajeVencido: document.getElementById("txtVencido").value.trim(),
+      mensajeSinLlave: document.getElementById("txtSinLlave").value.trim(),
+      mensajePrecargado: document.getElementById("txtPrecargado").value.trim(),
+      actualizadoEn: serverTimestamp(),
+      actualizadoPor: uidActual
+    });
+    toast("Configuración guardada.", "ok");
+  } catch (e) {
+    console.error(e);
+    toast("No se pudo guardar.", "error");
+  }
+  btn.disabled = false;
+});
+</script>
+</body>
+</html>

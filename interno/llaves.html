@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Llaves — remateTaller</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+<link rel="stylesheet" href="design-system.css">
+</head>
+<body>
+
+<header id="topbar"></header>
+
+<main>
+  <h1>Llaves de acceso</h1>
+
+  <!-- ============ Crear llave ============ -->
+  <div class="card">
+    <h2 style="margin-top:0;">Nueva llave</h2>
+
+    <label for="inpNombre">Nombre del comprador</label>
+    <input type="text" id="inpNombre" autocomplete="off">
+
+    <label for="inpTelefono">Teléfono (con código de país, ej: 59899123456)</label>
+    <input type="tel" id="inpTelefono" inputmode="numeric" autocomplete="off">
+
+    <label for="selDuracion">Validez del acceso</label>
+    <select id="selDuracion">
+      <option value="3">3 días</option>
+      <option value="7" selected>7 días</option>
+      <option value="14">14 días</option>
+      <option value="30">30 días</option>
+    </select>
+
+    <label>Categorías habilitadas</label>
+    <div id="listaCategorias" class="texto-suave">Cargando categorías…</div>
+
+    <button class="btn" id="btnCrear">
+      <span class="material-icons">vpn_key</span> Generar llave
+    </button>
+  </div>
+
+  <!-- ============ Llave recién creada ============ -->
+  <div class="card" id="cardNueva" style="display:none; border-color:var(--c-primario);">
+    <h2 style="margin-top:0;">Llave creada ✅</h2>
+    <p style="font-size:24px; font-weight:700; letter-spacing:3px; text-align:center;" id="nuevoCodigo"></p>
+    <p class="texto-suave" style="word-break:break-all;" id="nuevoLink"></p>
+    <div class="fila">
+      <button class="btn secundario" id="btnCopiarLink">
+        <span class="material-icons">content_copy</span> Copiar link
+      </button>
+      <a class="btn" id="btnEnviarWhatsapp" href="#" target="_blank" rel="noopener">
+        <span class="material-icons">chat</span> Enviar
+      </a>
+    </div>
+  </div>
+
+  <!-- ============ Listado ============ -->
+  <h2>Llaves generadas</h2>
+  <div id="listaLlaves"><p class="texto-suave">Cargando…</p></div>
+</main>
+
+<script type="module">
+import {
+  verificarAuth, renderNav, db, toast,
+  doc, setDoc, updateDoc, collection, getDocs, query, orderBy,
+  serverTimestamp, generarCodigoLlave, urlBasePublica,
+  fmtFecha, tsAms, soloDigitos
+} from "./utils.js";
+
+let uidActual = null;
+let categorias = []; // [{id, nombre}]
+
+verificarAuth(async (user) => {
+  uidActual = user.uid;
+  renderNav("llaves");
+  await cargarCategorias();
+  await cargarLlaves();
+});
+
+// ---------- Categorías ----------
+async function cargarCategorias() {
+  const cont = document.getElementById("listaCategorias");
+  try {
+    const snap = await getDocs(collection(db, "categorias"));
+    categorias = [];
+    snap.forEach((d) => {
+      const c = d.data();
+      if (c.activa !== false) categorias.push({ id: d.id, nombre: c.nombre || d.id });
+    });
+  } catch (e) { categorias = []; }
+
+  if (categorias.length === 0) {
+    cont.innerHTML =
+      '<span class="badge neutro">Sin categorías aún</span> ' +
+      "La llave dará acceso a <strong>todo el catálogo</strong>. " +
+      "Las categorías se crean desde Inventario.";
+    return;
+  }
+  let html = '<label style="font-weight:400; margin-top:4px;">' +
+    '<input type="checkbox" id="chkTodas" checked style="width:auto; margin-right:8px;"> ' +
+    "Todas las categorías</label>";
+  categorias.forEach((c) => {
+    html += '<label style="font-weight:400; margin-top:4px;">' +
+      '<input type="checkbox" class="chkCat" value="' + c.id + '" style="width:auto; margin-right:8px;" disabled> ' +
+      c.nombre + "</label>";
+  });
+  cont.innerHTML = html;
+  document.getElementById("chkTodas").addEventListener("change", (e) => {
+    document.querySelectorAll(".chkCat").forEach((ch) => {
+      ch.disabled = e.target.checked;
+      if (e.target.checked) ch.checked = false;
+    });
+  });
+}
+
+// ---------- Crear ----------
+document.getElementById("btnCrear").addEventListener("click", async () => {
+  const nombre = document.getElementById("inpNombre").value.trim();
+  const telefono = soloDigitos(document.getElementById("inpTelefono").value);
+  const dias = Number(document.getElementById("selDuracion").value);
+
+  if (!nombre) { toast("Cargá el nombre del comprador.", "error"); return; }
+  if (!telefono) { toast("Cargá el teléfono del comprador.", "error"); return; }
+
+  const chkTodas = document.getElementById("chkTodas");
+  let cats = [];
+  if (!chkTodas || chkTodas.checked) {
+    cats = []; // vacío = acceso a todo
+  } else {
+    document.querySelectorAll(".chkCat:checked").forEach((ch) => cats.push(ch.value));
+    if (cats.length === 0) { toast("Elegí al menos una categoría o marcá Todas.", "error"); return; }
+  }
+
+  const btn = document.getElementById("btnCrear");
+  btn.disabled = true;
+  try {
+    const codigo = generarCodigoLlave();
+    const vence = new Date(Date.now() + dias * 24 * 60 * 60 * 1000);
+    await setDoc(doc(db, "llaves", codigo), {
+      nombre: nombre,
+      telefono: telefono,
+      categorias: cats,
+      creadaEn: serverTimestamp(),
+      venceEn: vence,
+      revocada: false,
+      creadaPor: uidActual
+    });
+    mostrarNueva(codigo, nombre, telefono, vence);
+    document.getElementById("inpNombre").value = "";
+    document.getElementById("inpTelefono").value = "";
+    toast("Llave " + codigo + " creada.", "ok");
+    await cargarLlaves();
+  } catch (e) {
+    console.error(e);
+    toast("No se pudo crear la llave.", "error");
+  }
+  btn.disabled = false;
+});
+
+function mostrarNueva(codigo, nombre, telefono, vence) {
+  const link = urlBasePublica() + "/?llave=" + codigo;
+  document.getElementById("nuevoCodigo").textContent = codigo;
+  document.getElementById("nuevoLink").textContent = link;
+  document.getElementById("btnCopiarLink").onclick = async () => {
+    try { await navigator.clipboard.writeText(link); toast("Link copiado.", "ok"); }
+    catch (e) { toast("No se pudo copiar. Seleccionalo a mano.", "error"); }
+  };
+  const msg = encodeURIComponent(
+    "Hola " + nombre + "! Este es tu acceso al catálogo de remateTaller " +
+    "(válido hasta el " + vence.toLocaleDateString("es-UY") + "):\n" + link
+  );
+  document.getElementById("btnEnviarWhatsapp").href =
+    "https://wa.me/" + telefono + "?text=" + msg;
+  document.getElementById("cardNueva").style.display = "block";
+  document.getElementById("cardNueva").scrollIntoView({ behavior: "smooth" });
+}
+
+// ---------- Listado ----------
+async function cargarLlaves() {
+  const cont = document.getElementById("listaLlaves");
+  try {
+    const snap = await getDocs(query(collection(db, "llaves"), orderBy("creadaEn", "desc")));
+    if (snap.empty) {
+      cont.innerHTML = '<p class="texto-suave">Todavía no hay llaves generadas.</p>';
+      return;
+    }
+    let html = "";
+    const ahora = Date.now();
+    snap.forEach((d) => {
+      const l = d.data();
+      const venceMs = tsAms(l.venceEn);
+      let badge;
+      if (l.revocada) badge = '<span class="badge error">Revocada</span>';
+      else if (venceMs < ahora) badge = '<span class="badge aviso">Vencida</span>';
+      else badge = '<span class="badge ok">Activa</span>';
+
+      const catsTxt = (Array.isArray(l.categorias) && l.categorias.length > 0)
+        ? l.categorias.length + " categoría(s)"
+        : "todo el catálogo";
+
+      html += '<div class="card">' +
+        '<div class="fila" style="justify-content:space-between;">' +
+        "<strong>" + (l.nombre || "—") + "</strong>" + badge + "</div>" +
+        '<p class="texto-suave" style="margin:6px 0;">Código: <strong>' + d.id + "</strong> · Tel: " +
+        (l.telefono || "—") + "<br>Vence: " + fmtFecha(l.venceEn) + " · Acceso: " + catsTxt + "</p>";
+
+      if (!l.revocada && venceMs > ahora) {
+        html += '<div class="fila">' +
+          '<button class="btn secundario btnCompartir" data-codigo="' + d.id + '" data-nombre="' +
+          (l.nombre || "") + '" data-tel="' + (l.telefono || "") + '" data-vence="' + venceMs + '">' +
+          '<span class="material-icons">chat</span> Compartir</button>' +
+          '<button class="btn peligro btnRevocar" data-codigo="' + d.id + '">' +
+          '<span class="material-icons">block</span> Revocar</button></div>';
+      }
+      html += "</div>";
+    });
+    cont.innerHTML = html;
+
+    cont.querySelectorAll(".btnRevocar").forEach((b) => {
+      b.addEventListener("click", async () => {
+        if (!confirm("¿Revocar la llave " + b.dataset.codigo + "? El comprador perderá el acceso.")) return;
+        try {
+          await updateDoc(doc(db, "llaves", b.dataset.codigo), { revocada: true });
+          toast("Llave revocada.", "ok");
+          cargarLlaves();
+        } catch (e) { toast("No se pudo revocar.", "error"); }
+      });
+    });
+
+    cont.querySelectorAll(".btnCompartir").forEach((b) => {
+      b.addEventListener("click", () => {
+        const link = urlBasePublica() + "/?llave=" + b.dataset.codigo;
+        const venceTxt = new Date(Number(b.dataset.vence)).toLocaleDateString("es-UY");
+        const msg = encodeURIComponent(
+          "Hola " + b.dataset.nombre + "! Este es tu acceso al catálogo de remateTaller " +
+          "(válido hasta el " + venceTxt + "):\n" + link
+        );
+        window.open("https://wa.me/" + b.dataset.tel + "?text=" + msg, "_blank");
+      });
+    });
+  } catch (e) {
+    console.error(e);
+    cont.innerHTML = '<p class="texto-suave">Error cargando las llaves.</p>';
+  }
+}
+</script>
+</body>
+</html>

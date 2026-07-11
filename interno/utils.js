@@ -1,6 +1,6 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.0)
-// Toda página interna importa desde acá.
+// utils.js — Núcleo compartido de remateTaller (v1.1)
+// Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 // =====================================================
 
@@ -28,8 +28,7 @@ export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// Re-export de helpers de Firestore para que las páginas
-// no tengan que importar del CDN directamente.
+// Re-export de helpers de Firestore para las páginas.
 export {
   doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
   collection, getDocs, query, where, orderBy, limit,
@@ -37,10 +36,19 @@ export {
   signInWithEmailAndPassword
 };
 
-// ---------- Cloudinary ----------
+// ---------- Cloudinary (cuenta propia de remateTaller) ----------
+// Solo cloud name + preset unsigned. El api_secret NUNCA va en el cliente.
 export const CLOUDINARY = {
-  cloud: "dnwfu8ffn",
-  preset: "preset-remate" // PENDIENTE: crear este unsigned preset en Cloudinary
+  cloud: "r9u5oous",
+  preset: "preset-remate" // unsigned preset — crearlo en Cloudinary si no existe
+};
+
+// ---------- Administradores iniciales ----------
+// En el primer login se les crea automáticamente su doc en `usuarios`.
+// Solo estos uid se auto-provisionan; cualquier otro queda afuera.
+const ADMINS_INICIALES = {
+  "6HnSCkjKGEWKv39f37HJRpLEToV2": "Florencia",
+  "R9b8YLM66mdrY8FTC8gEjBNaOr92": "Mauro"
 };
 
 // =====================================================
@@ -49,14 +57,28 @@ export const CLOUDINARY = {
 
 /**
  * Verifica sesión + usuario activo en Firestore.
- * Si no hay sesión o está inactivo → login.html.
+ * Auto-crea el doc de usuario si el uid está en ADMINS_INICIALES.
+ * Sin sesión o inactivo → login.html.
  * callback(user, datosUsuario)
  */
 export function verificarAuth(callback) {
   onAuthStateChanged(auth, async (user) => {
     if (!user) { window.location.href = "login.html"; return; }
     try {
-      const snap = await getDoc(doc(db, "usuarios", user.uid));
+      const ref = doc(db, "usuarios", user.uid);
+      let snap = await getDoc(ref);
+
+      if (!snap.exists() && ADMINS_INICIALES[user.uid]) {
+        await setDoc(ref, {
+          nombre: ADMINS_INICIALES[user.uid],
+          email: user.email || "",
+          rol: "admin",
+          activo: true,
+          creadoEn: serverTimestamp()
+        });
+        snap = await getDoc(ref);
+      }
+
       if (!snap.exists() || snap.data().activo === false) {
         await signOut(auth);
         window.location.href = "login.html";
@@ -76,21 +98,62 @@ export async function cerrarSesion() {
 }
 
 // =====================================================
-// NAVEGACIÓN (mobile-first)
+// LLAVES DE ACCESO (compradores) — usado por páginas públicas
+// =====================================================
+
+/**
+ * Valida una llave contra la base.
+ * Devuelve { ok, motivo, datos }:
+ *   ok=true  → llave vigente
+ *   motivo: 'sin-codigo' | 'inexistente' | 'revocada' | 'vencida'
+ */
+export async function validarLlave(codigo) {
+  if (!codigo) return { ok: false, motivo: "sin-codigo" };
+  try {
+    const snap = await getDoc(doc(db, "llaves", String(codigo).trim().toUpperCase()));
+    if (!snap.exists()) return { ok: false, motivo: "inexistente" };
+    const d = snap.data();
+    if (d.revocada) return { ok: false, motivo: "revocada", datos: d };
+    const vence = tsAms(d.venceEn);
+    if (!vence || Date.now() > vence) return { ok: false, motivo: "vencida", datos: d };
+    return { ok: true, datos: d };
+  } catch (e) {
+    console.error("Error validando llave:", e);
+    return { ok: false, motivo: "error" };
+  }
+}
+
+/** Lee la configuración pública (textos, WhatsApp de contacto). */
+export async function leerConfigPublico() {
+  try {
+    const snap = await getDoc(doc(db, "config", "publico"));
+    return snap.exists() ? snap.data() : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+/** Convierte Timestamp | Date | ms → ms (o 0). */
+export function tsAms(v) {
+  if (!v) return 0;
+  if (v.toDate) return v.toDate().getTime();
+  if (v instanceof Date) return v.getTime();
+  return Number(v) || 0;
+}
+
+// =====================================================
+// NAVEGACIÓN INTERNA (mobile-first)
 // =====================================================
 
 const NAV_ITEMS = [
-  { id: "panel",      label: "Inicio",     icon: "home",          href: "panel.html" },
-  { id: "inventario", label: "Inventario", icon: "inventory_2",   href: "inventario.html" },
-  { id: "llaves",     label: "Llaves",     icon: "vpn_key",       href: "llaves.html" },
-  { id: "pedidos",    label: "Pedidos",    icon: "shopping_cart", href: "pedidos.html" },
-  { id: "ventas",     label: "Ventas",     icon: "receipt_long",  href: "ventas.html" }
+  { id: "panel",         label: "Inicio",     icon: "home",          href: "panel.html" },
+  { id: "inventario",    label: "Inventario", icon: "inventory_2",   href: "inventario.html" },
+  { id: "llaves",        label: "Llaves",     icon: "vpn_key",       href: "llaves.html" },
+  { id: "pedidos",       label: "Pedidos",    icon: "shopping_cart", href: "pedidos.html" },
+  { id: "ventas",        label: "Ventas",     icon: "receipt_long",  href: "ventas.html" },
+  { id: "configuracion", label: "Config.",    icon: "settings",      href: "configuracion.html" }
 ];
 
-/**
- * Renderiza la barra superior + nav dentro de <header id="topbar">.
- * @param {string} actual - id de la página actual (marca el link activo)
- */
 export function renderNav(actual) {
   const el = document.getElementById("topbar");
   if (!el) return;
@@ -109,7 +172,7 @@ export function renderNav(actual) {
 
 // =====================================================
 // FOTOS: compresión client-side + subida a Cloudinary
-// (patrón heredado de Casa Verde: lado mayor 2000px, JPEG 0.85)
+// (lado mayor 2000px, JPEG 0.85 — patrón Casa Verde)
 // =====================================================
 
 export function comprimirImagen(file, maxLado = 2000, calidad = 0.85) {
@@ -147,11 +210,6 @@ export function comprimirImagen(file, maxLado = 2000, calidad = 0.85) {
   });
 }
 
-/**
- * Comprime y sube una foto a Cloudinary. Devuelve la secure_url.
- * @param {File} file
- * @param {string} carpeta - carpeta destino en Cloudinary (ej: "productos")
- */
 export async function subirFoto(file, carpeta) {
   const blob = await comprimirImagen(file);
   const fd = new FormData();
@@ -171,20 +229,17 @@ export async function subirFoto(file, carpeta) {
 // HELPERS GENERALES
 // =====================================================
 
-/** Formato de moneda: fmtMoneda(1500, 'UYU') → "$ 1.500" · ('USD') → "US$ 1.500" */
 export function fmtMoneda(monto, moneda) {
   const n = Number(monto || 0).toLocaleString("es-UY", { maximumFractionDigits: 2 });
   return (moneda === "USD" ? "US$ " : "$ ") + n;
 }
 
-/** Formato de fecha corta: fmtFecha(Timestamp|Date|ms) → "11/07/2026" */
 export function fmtFecha(f) {
-  if (!f) return "—";
-  const d = f.toDate ? f.toDate() : new Date(f);
-  return d.toLocaleDateString("es-UY");
+  const ms = tsAms(f);
+  return ms ? new Date(ms).toLocaleDateString("es-UY") : "—";
 }
 
-/** Genera un código de llave legible: 8 caracteres sin ambiguos (0/O, 1/I/L) */
+/** Código de llave legible: 8 caracteres sin ambiguos (0/O, 1/I/L) */
 export function generarCodigoLlave() {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
   let c = "";
@@ -192,7 +247,18 @@ export function generarCodigoLlave() {
   return c;
 }
 
-/** Toast simple de confirmación/error */
+/** URL base del sitio público (quita /interno/... si corresponde). */
+export function urlBasePublica() {
+  const href = window.location.href;
+  if (href.indexOf("/interno/") !== -1) return href.split("/interno/")[0];
+  return window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, "");
+}
+
+/** Solo dígitos de un teléfono (para links wa.me). */
+export function soloDigitos(t) {
+  return String(t || "").replace(/\D/g, "");
+}
+
 export function toast(mensaje, tipo = "ok") {
   let t = document.getElementById("toast");
   if (!t) {
