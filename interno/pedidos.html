@@ -215,8 +215,12 @@ async function validar(pedidoId) {
     "\n\nSe descuenta el stock y queda registrada. ¿Validar?")) return;
 
   try {
-    // 1) Registro inmutable en ventas (ID determinístico = idempotente)
-    await setDoc(doc(db, "ventas", "venta-" + pedidoId), {
+    // 1) Registro inmutable en ventas (ID determinístico = idempotente).
+    //    Si la venta ya existía, se preservan pago y entrega registrados.
+    const ventaRef = doc(db, "ventas", "venta-" + pedidoId);
+    const previoSnap = await getDoc(ventaRef);
+    const previo = previoSnap.exists() ? previoSnap.data() : null;
+    await setDoc(ventaRef, {
       fecha: serverTimestamp(),
       llaveCodigo: p.llaveCodigo || "",
       comprador: { nombre: p.nombre || "", telefono: p.telefono || "" },
@@ -230,7 +234,9 @@ async function validar(pedidoId) {
         moneda: it.moneda,
         precioFinal: Number(it.precioFinal || 0)
       })),
-      totales: { UYU: tot.UYU || 0, USD: tot.USD || 0 }
+      totales: { UYU: tot.UYU || 0, USD: tot.USD || 0 },
+      pago: (previo && previo.pago) || { registros: [] },
+      entrega: (previo && previo.entrega) || { estado: "pendiente", historial: [] }
     });
 
     // 2) Descontar stock

@@ -10,6 +10,13 @@
 details summary { cursor:pointer; list-style:none; }
 details summary::-webkit-details-marker { display:none; }
 .item-fila { border-top:1px solid var(--c-borde); padding:8px 0; font-size:14px; }
+.prod-detalle { background:var(--c-fondo); border-radius:8px; padding:10px; margin:6px 0; font-size:14px; }
+.thumb { width:72px; height:72px; object-fit:cover; border-radius:8px; border:1px solid var(--c-borde); }
+.thumbs { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+.seccion { border-top:2px solid var(--c-borde); margin-top:12px; padding-top:10px; }
+.pago-fila { border-top:1px dashed var(--c-borde); padding:6px 0; font-size:13px; }
+.inp-mini { width:100%; padding:8px; font-size:15px; }
+.btn-mini { padding:8px 10px; font-size:13px; width:auto; flex:none; margin-top:0; }
 </style>
 </head>
 <body>
@@ -23,47 +30,152 @@ details summary::-webkit-details-marker { display:none; }
     <div class="kpi"><div class="num" id="kpiCant">—</div><div class="lbl">Ventas</div></div>
     <div class="kpi"><div class="num" id="kpiUYU" style="font-size:18px;">—</div><div class="lbl">Total UYU</div></div>
     <div class="kpi"><div class="num" id="kpiUSD" style="font-size:18px;">—</div><div class="lbl">Total USD</div></div>
+    <div class="kpi"><div class="num" id="kpiSaldo" style="font-size:14px;">—</div><div class="lbl">Por cobrar</div></div>
   </div>
 
+  <div class="fila" style="margin-bottom:8px;">
+    <select id="filtroPago">
+      <option value="">Pago: todos</option>
+      <option value="pendiente">Pago pendiente</option>
+      <option value="parcial">Pago parcial</option>
+      <option value="pagado">Pagadas</option>
+    </select>
+    <select id="filtroEntrega">
+      <option value="">Entrega: todas</option>
+      <option value="pendiente">Sin preparar</option>
+      <option value="preparada">Preparadas</option>
+      <option value="entregada">Entregadas</option>
+    </select>
+  </div>
   <input type="text" id="filtroTexto" placeholder="Buscar por comprador o artículo…" style="margin-bottom:10px;">
   <div id="lista"><p class="texto-suave">Cargando…</p></div>
 </main>
 
 <script type="module">
 import {
-  verificarAuth, renderNav, db, fmtMoneda, fmtFecha,
-  collection, getDocs, query, orderBy
+  verificarAuth, renderNav, db, toast, fmtMoneda, fmtFecha,
+  doc, getDoc, updateDoc, addDoc, collection, getDocs, query, orderBy,
+  serverTimestamp
 } from "./utils.js";
 
 let ventas = [];
+let metodos = [];              // métodos de pago custom (colección metodosPago)
+let usuarioActual = null;
+const productosCache = {};     // productoId → datos | null (ya no existe)
+const METODOS_BASE = ["Efectivo", "Transferencia"];
 
-verificarAuth(async () => {
+verificarAuth(async (user, datos) => {
+  usuarioActual = { uid: user.uid, nombre: datos.nombre || "" };
   renderNav("ventas");
-  const snap = await getDocs(query(collection(db, "ventas"), orderBy("fecha", "desc")));
-  ventas = [];
-  snap.forEach((d) => ventas.push({ id: d.id, ...d.data() }));
+  await Promise.all([cargarVentas(), cargarMetodos()]);
   kpis();
   render();
 });
 
-document.getElementById("filtroTexto").addEventListener("input", render);
+async function cargarVentas() {
+  const snap = await getDocs(query(collection(db, "ventas"), orderBy("fecha", "desc")));
+  ventas = [];
+  snap.forEach((d) => ventas.push({ id: d.id, ...d.data() }));
+}
 
+async function cargarMetodos() {
+  try {
+    const snap = await getDocs(collection(db, "metodosPago"));
+    metodos = [];
+    snap.forEach((d) => metodos.push({ id: d.id, ...d.data() }));
+    metodos.sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+  } catch (e) { console.error(e); }
+}
+
+function opcionesMetodo() {
+  const nombres = METODOS_BASE.slice();
+  metodos.forEach((m) => {
+    if (m.activa !== false &&
+        !nombres.some((n) => n.toLowerCase() === (m.nombre || "").toLowerCase())) {
+      nombres.push(m.nombre);
+    }
+  });
+  return nombres.map((n) => `<option value="${n}">${n}</option>`).join("") +
+    '<option value="__nuevo">➕ Nuevo método…</option>';
+}
+
+// ============ Estado de pago (derivado de los registros) ============
+function pagosDe(v) { return (v.pago && v.pago.registros) || []; }
+
+function pagadoPorMoneda(v) {
+  const t = { UYU: 0, USD: 0 };
+  pagosDe(v).forEach((r) => { t[r.moneda] = (t[r.moneda] || 0) + Number(r.monto || 0); });
+  return t;
+}
+
+function saldoDe(v) {
+  const tot = v.totales || {};
+  const pag = pagadoPorMoneda(v);
+  return {
+    UYU: Math.max(0, Number(tot.UYU || 0) - pag.UYU),
+    USD: Math.max(0, Number(tot.USD || 0) - pag.USD)
+  };
+}
+
+function estadoPago(v) {
+  const s = saldoDe(v);
+  if (s.UYU <= 0 && s.USD <= 0) return "pagado";
+  return pagosDe(v).length > 0 ? "parcial" : "pendiente";
+}
+
+function estadoEntrega(v) { return (v.entrega && v.entrega.estado) || "pendiente"; }
+
+const ETIQ_ENTREGA = { pendiente: "Pendiente", preparada: "Preparada", entregada: "Entregada" };
+
+function badgePago(e) {
+  if (e === "pagado") return '<span class="badge ok">Pagada</span>';
+  if (e === "parcial") return '<span class="badge aviso">Pago parcial</span>';
+  return '<span class="badge error">Sin pagar</span>';
+}
+function badgeEntrega(e) {
+  if (e === "entregada") return '<span class="badge ok">Entregada</span>';
+  if (e === "preparada") return '<span class="badge aviso">Preparada</span>';
+  return '<span class="badge neutro">Sin preparar</span>';
+}
+
+// ============ KPIs ============
 function kpis() {
-  let uyu = 0, usd = 0;
+  let uyu = 0, usd = 0, su = 0, sd = 0;
   ventas.forEach((v) => {
     uyu += Number((v.totales && v.totales.UYU) || 0);
     usd += Number((v.totales && v.totales.USD) || 0);
+    const s = saldoDe(v);
+    su += s.UYU;
+    sd += s.USD;
   });
   document.getElementById("kpiCant").textContent = ventas.length;
   document.getElementById("kpiUYU").textContent = fmtMoneda(uyu, "UYU");
   document.getElementById("kpiUSD").textContent = fmtMoneda(usd, "USD");
+  document.getElementById("kpiSaldo").innerHTML =
+    fmtMoneda(su, "UYU") + "<br>" + fmtMoneda(sd, "USD");
+}
+
+// ============ Render ============
+document.getElementById("filtroTexto").addEventListener("input", render);
+document.getElementById("filtroPago").addEventListener("change", render);
+document.getElementById("filtroEntrega").addEventListener("change", render);
+
+function abiertos() {
+  const s = new Set();
+  document.querySelectorAll("details[data-v][open]").forEach((d) => s.add(d.dataset.v));
+  return s;
 }
 
 function render() {
   const f = document.getElementById("filtroTexto").value.trim().toLowerCase();
+  const fp = document.getElementById("filtroPago").value;
+  const fe = document.getElementById("filtroEntrega").value;
   const cont = document.getElementById("lista");
+  const abiertas = abiertos();
 
   const lista = ventas.filter((v) => {
+    if (fp && estadoPago(v) !== fp) return false;
+    if (fe && estadoEntrega(v) !== fe) return false;
     if (!f) return true;
     const enComprador = ((v.comprador && v.comprador.nombre) || "").toLowerCase().includes(f);
     const enItems = (v.items || []).some((it) => (it.descripcion || "").toLowerCase().includes(f));
@@ -71,7 +183,7 @@ function render() {
   });
 
   if (lista.length === 0) {
-    cont.innerHTML = '<p class="texto-suave">No hay ventas registradas todavía.</p>';
+    cont.innerHTML = '<p class="texto-suave">No hay ventas para mostrar con estos filtros.</p>';
     return;
   }
 
@@ -80,23 +192,206 @@ function render() {
     if (v.totales && v.totales.UYU > 0) partes.push(fmtMoneda(v.totales.UYU, "UYU"));
     if (v.totales && v.totales.USD > 0) partes.push(fmtMoneda(v.totales.USD, "USD"));
 
-    const itemsHtml = (v.items || []).map((it) =>
-      `<div class="item-fila">${it.descripcion} ${it.esLote ? "(LOTE, " + it.cantidad + " u.)" : "× " + it.cantidad}
-       — <strong>${fmtMoneda(it.precioFinal, it.moneda)}</strong></div>`
-    ).join("");
+    const itemsHtml = (v.items || []).map((it, i) => `
+      <div class="item-fila itemProd" data-v="${v.id}" data-i="${i}" data-prod="${it.productoId || ""}">
+        <span class="material-icons" style="font-size:16px; vertical-align:-3px; color:var(--c-primario);">visibility</span>
+        ${it.descripcion} ${it.esLote ? "(LOTE, " + it.cantidad + " u.)" : "× " + it.cantidad}
+        — <strong>${fmtMoneda(it.precioFinal, it.moneda)}</strong>
+      </div>
+      <div class="prod-detalle" id="pd-${v.id}-${i}" style="display:none;"></div>`).join("");
 
-    return `<div class="card"><details>
+    return `<div class="card"><details data-v="${v.id}" ${abiertas.has(v.id) ? "open" : ""}>
       <summary>
         <div class="fila" style="justify-content:space-between;">
           <strong>${(v.comprador && v.comprador.nombre) || "—"}</strong>
           <strong style="color:var(--c-primario);">${partes.join(" + ") || "—"}</strong>
         </div>
+        <div style="margin:4px 0;">${badgePago(estadoPago(v))} ${badgeEntrega(estadoEntrega(v))}</div>
         <span class="texto-suave">${fmtFecha(v.fecha)} · vendió ${v.vendedorNombre || "—"} ·
         ${(v.items || []).length} ítem(s) · Tel: ${(v.comprador && v.comprador.telefono) || "—"}</span>
       </summary>
+      <p class="texto-suave" style="margin:8px 0 0; font-size:12px;">Tocá un artículo para ver fotos y ubicación.</p>
       ${itemsHtml}
+      ${seccionEntrega(v)}
+      ${seccionPago(v)}
     </details></div>`;
   }).join("");
+
+  enganchar(cont);
+}
+
+function seccionEntrega(v) {
+  const est = estadoEntrega(v);
+  const btns = ["pendiente", "preparada", "entregada"].map((e) =>
+    `<button class="btn ${e === est ? "" : "secundario"} btn-mini btnEntrega" data-v="${v.id}" data-e="${e}">
+       ${ETIQ_ENTREGA[e]}</button>`).join("");
+  const hist = ((v.entrega && v.entrega.historial) || []).map((h) =>
+    `<div class="pago-fila texto-suave">${ETIQ_ENTREGA[h.estado] || h.estado} · ${fmtFecha(h.fecha)} · ${h.porNombre || "—"}</div>`
+  ).join("");
+  return `<div class="seccion"><strong>Entrega</strong>
+    <div class="fila" style="margin-top:6px;">${btns}</div>${hist}</div>`;
+}
+
+function seccionPago(v) {
+  const est = estadoPago(v);
+  const saldo = saldoDe(v);
+  const saldoTxt = [];
+  if (v.totales && v.totales.UYU > 0) saldoTxt.push("Saldo: " + fmtMoneda(saldo.UYU, "UYU"));
+  if (v.totales && v.totales.USD > 0) saldoTxt.push("Saldo: " + fmtMoneda(saldo.USD, "USD"));
+
+  const regs = pagosDe(v).map((r) =>
+    `<div class="pago-fila">${fmtFecha(r.fecha)} · <strong>${fmtMoneda(r.monto, r.moneda)}</strong> · ${r.metodo || "—"}
+     ${r.nota ? `<br><span class="texto-suave">${r.nota}</span>` : ""}
+     <br><span class="texto-suave">registró ${r.registradoNombre || "—"}</span></div>`).join("");
+
+  const monedaDefault = (saldo.USD > 0 && saldo.UYU <= 0) ? "USD" : "UYU";
+  const form = est === "pagado" ? "" : `
+    <div class="fila" style="margin-top:8px;">
+      <div style="flex:1;">
+        <label style="margin:0 0 2px; font-size:12px;">Monto</label>
+        <input type="number" class="inp-mini inpMonto" data-v="${v.id}" inputmode="decimal" min="0">
+      </div>
+      <div>
+        <label style="margin:0 0 2px; font-size:12px;">Moneda</label>
+        <select class="inp-mini selMoneda" data-v="${v.id}">
+          <option value="UYU" ${monedaDefault === "UYU" ? "selected" : ""}>UYU</option>
+          <option value="USD" ${monedaDefault === "USD" ? "selected" : ""}>USD</option>
+        </select>
+      </div>
+    </div>
+    <label style="margin:8px 0 2px; font-size:12px;">Método</label>
+    <select class="selMetodo" data-v="${v.id}">${opcionesMetodo()}</select>
+    <label style="margin:8px 0 2px; font-size:12px;">Detalle (opcional)</label>
+    <input type="text" class="inpNota" data-v="${v.id}" placeholder="Ej: seña, transferencia BROU, resto al retirar…">
+    <button class="btn secundario btnRegistrarPago" data-v="${v.id}">
+      <span class="material-icons">payments</span> Registrar pago</button>`;
+
+  return `<div class="seccion"><strong>Pago</strong> ${badgePago(est)}
+    ${saldoTxt.length ? `<br><span class="texto-suave">${saldoTxt.join(" · ")}</span>` : ""}
+    ${regs || '<p class="texto-suave" style="margin:6px 0 0;">Sin pagos registrados.</p>'}
+    ${form}</div>`;
+}
+
+// ============ Interacciones ============
+function enganchar(cont) {
+  // Detalle de producto por ítem (fotos + descripción + ubicación)
+  cont.querySelectorAll(".itemProd").forEach((el) => {
+    el.addEventListener("click", () =>
+      mostrarDetalle(el.dataset.prod, document.getElementById("pd-" + el.dataset.v + "-" + el.dataset.i)));
+  });
+
+  // Método nuevo desde el select (mismo espíritu que las categorías)
+  cont.querySelectorAll(".selMetodo").forEach((s) => {
+    s.addEventListener("change", async () => {
+      if (s.value !== "__nuevo") return;
+      const nombre = (prompt("Nombre del nuevo método de pago:") || "").trim();
+      if (!nombre) { s.value = METODOS_BASE[0]; return; }
+      try {
+        await addDoc(collection(db, "metodosPago"), {
+          nombre, activa: true, creadoEn: serverTimestamp(), creadoPor: usuarioActual.uid
+        });
+        metodos.push({ nombre, activa: true });
+        const opt = document.createElement("option");
+        opt.value = nombre;
+        opt.textContent = nombre;
+        s.insertBefore(opt, s.querySelector('option[value="__nuevo"]'));
+        s.value = nombre;
+        toast("Método agregado.", "ok");
+      } catch (e) {
+        console.error(e);
+        s.value = METODOS_BASE[0];
+        toast("No se pudo agregar el método.", "error");
+      }
+    });
+  });
+
+  // Registrar pago
+  cont.querySelectorAll(".btnRegistrarPago").forEach((b) => {
+    b.addEventListener("click", async () => {
+      const id = b.dataset.v;
+      const v = ventas.find((x) => x.id === id);
+      const monto = Number(document.querySelector(`.inpMonto[data-v="${id}"]`).value);
+      const moneda = document.querySelector(`.selMoneda[data-v="${id}"]`).value;
+      const metodo = document.querySelector(`.selMetodo[data-v="${id}"]`).value;
+      const nota = document.querySelector(`.inpNota[data-v="${id}"]`).value.trim();
+      if (!(monto > 0)) { toast("Cargá el monto del pago.", "error"); return; }
+      if (metodo === "__nuevo") { toast("Elegí el método de pago.", "error"); return; }
+
+      b.disabled = true;
+      try {
+        // serverTimestamp() no funciona dentro de arrays → fecha en ms.
+        const registros = pagosDe(v).concat([{
+          fecha: Date.now(), monto, moneda, metodo, nota,
+          registradoPor: usuarioActual.uid, registradoNombre: usuarioActual.nombre
+        }]);
+        await updateDoc(doc(db, "ventas", id), { pago: { registros } });
+        v.pago = { registros };
+        toast("Pago registrado.", "ok");
+        kpis();
+        render();
+      } catch (e) {
+        console.error(e);
+        toast("No se pudo registrar el pago.", "error");
+        b.disabled = false;
+      }
+    });
+  });
+
+  // Estado de entrega
+  cont.querySelectorAll(".btnEntrega").forEach((b) => {
+    b.addEventListener("click", async () => {
+      const v = ventas.find((x) => x.id === b.dataset.v);
+      const nuevo = b.dataset.e;
+      if (estadoEntrega(v) === nuevo) return;
+      if (!confirm('¿Marcar entrega como "' + ETIQ_ENTREGA[nuevo] + '"?')) return;
+      try {
+        const historial = ((v.entrega && v.entrega.historial) || []).concat([{
+          estado: nuevo, fecha: Date.now(),
+          por: usuarioActual.uid, porNombre: usuarioActual.nombre
+        }]);
+        await updateDoc(doc(db, "ventas", v.id), { entrega: { estado: nuevo, historial } });
+        v.entrega = { estado: nuevo, historial };
+        toast("Entrega actualizada.", "ok");
+        render();
+      } catch (e) {
+        console.error(e);
+        toast("No se pudo actualizar la entrega.", "error");
+      }
+    });
+  });
+}
+
+async function mostrarDetalle(prodId, box) {
+  if (!box) return;
+  if (box.style.display !== "none") { box.style.display = "none"; return; }
+  box.style.display = "block";
+  if (box.dataset.cargado) return;
+  box.innerHTML = '<span class="texto-suave">Cargando…</span>';
+  try {
+    if (!(prodId in productosCache)) {
+      const s = prodId ? await getDoc(doc(db, "productos", prodId)) : null;
+      productosCache[prodId] = s && s.exists() ? s.data() : null;
+    }
+    const p = productosCache[prodId];
+    if (!p) {
+      box.innerHTML = '<span class="texto-suave">El producto ya no está en el inventario.</span>';
+      box.dataset.cargado = "1";
+      return;
+    }
+    const nombre = p.nombre || p.descripcion || "—";
+    const desc = (p.nombre && p.descripcion)
+      ? `<br><span class="texto-suave" style="white-space:pre-line;">${p.descripcion}</span>` : "";
+    const fotos = (p.fotos || []).map((u) =>
+      `<a href="${u}" target="_blank" rel="noopener"><img class="thumb" src="${u}"></a>`).join("");
+    box.innerHTML = `<strong>${nombre}</strong>${desc}<br>
+      <span class="texto-suave"><span class="material-icons" style="font-size:15px; vertical-align:-3px;">place</span>
+      ${p.ubicacion || "sin ubicación"}</span>
+      ${fotos ? `<div class="thumbs">${fotos}</div>` : ""}`;
+    box.dataset.cargado = "1";
+  } catch (e) {
+    console.error(e);
+    box.innerHTML = '<span class="texto-suave">No se pudo cargar el detalle.</span>';
+  }
 }
 </script>
 </body>

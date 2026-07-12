@@ -16,6 +16,11 @@
   border:1px solid var(--c-borde); background:var(--c-superficie); margin:4px 4px 0 0; font-size:14px; }
 .chip.inactiva { opacity:0.45; text-decoration:line-through; }
 .prod-foto { width:72px; height:72px; object-fit:cover; border-radius:8px; flex:none; }
+details summary { cursor:pointer; list-style:none; }
+details summary::-webkit-details-marker { display:none; }
+.hist-fila { border-top:1px solid var(--c-borde); padding:8px 0; font-size:14px; }
+textarea { width:100%; padding:10px; border:1px solid var(--c-borde); border-radius:8px;
+  font:inherit; font-size:15px; resize:vertical; }
 </style>
 </head>
 <body>
@@ -41,12 +46,19 @@
     </p>
   </div>
 
-  <!-- ============ Formulario de producto ============ -->
-  <div class="card" id="cardForm">
+  <!-- ============ Formulario de producto (desplegable) ============ -->
+  <button class="btn" id="btnNuevoProducto">
+    <span class="material-icons">add</span> Agregar nuevo producto
+  </button>
+
+  <div class="card" id="cardForm" style="display:none;">
     <h2 style="margin-top:0;" id="tituloForm">Nuevo producto</h2>
 
-    <label for="pDescripcion">Descripción</label>
-    <input type="text" id="pDescripcion" autocomplete="off">
+    <label for="pNombre">Nombre</label>
+    <input type="text" id="pNombre" autocomplete="off" placeholder="Ej: Taladro percutor 13mm">
+
+    <label for="pDescripcion">Descripción (opcional)</label>
+    <textarea id="pDescripcion" rows="3" placeholder="Detalles, marca, estado, medidas…"></textarea>
 
     <label for="pCategoria">Categoría</label>
     <select id="pCategoria"></select>
@@ -112,7 +124,7 @@
 
 <script type="module">
 import {
-  verificarAuth, renderNav, db, toast, subirFoto, fmtMoneda,
+  verificarAuth, renderNav, db, toast, subirFoto, fmtMoneda, fmtFecha,
   doc, setDoc, addDoc, updateDoc, deleteDoc, collection, getDocs,
   query, where, orderBy, serverTimestamp, getCountFromServer
 } from "./utils.js";
@@ -121,6 +133,24 @@ let cats = [];        // [{id, nombre, activa}]
 let productos = [];   // [{id, ...datos}]
 let fotos = [];       // urls del producto en edición
 let editandoId = null;
+let ventasCache = null; // se carga la primera vez que se pide un historial
+
+// Los productos viejos solo tienen `descripcion`; se usa como nombre.
+function nombreDe(p) { return p.nombre || p.descripcion || "—"; }
+
+function abrirForm() {
+  document.getElementById("cardForm").style.display = "block";
+}
+function cerrarForm() {
+  limpiarForm();
+  document.getElementById("cardForm").style.display = "none";
+}
+document.getElementById("btnNuevoProducto").addEventListener("click", () => {
+  const visible = document.getElementById("cardForm").style.display !== "none";
+  if (visible) { cerrarForm(); return; }
+  limpiarForm();
+  abrirForm();
+});
 
 verificarAuth(async () => {
   renderNav("inventario");
@@ -259,18 +289,20 @@ function renderThumbs() {
 
 // ================= Guardar producto =================
 document.getElementById("btnGuardar").addEventListener("click", async () => {
+  const nombre = document.getElementById("pNombre").value.trim();
   const descripcion = document.getElementById("pDescripcion").value.trim();
   const categoriaId = document.getElementById("pCategoria").value;
   const cantidad = Number(document.getElementById("pCantidad").value);
   const precioSugerido = Number(document.getElementById("pPrecio").value);
   const precioLoteRaw = document.getElementById("pPrecioLote").value;
 
-  if (!descripcion) { toast("Cargá la descripción.", "error"); return; }
+  if (!nombre) { toast("Cargá el nombre del producto.", "error"); return; }
   if (!categoriaId) { toast("Creá y elegí una categoría.", "error"); return; }
   if (!(precioSugerido > 0)) { toast("Cargá el precio unitario.", "error"); return; }
   if (!(cantidad >= 0)) { toast("Cantidad inválida.", "error"); return; }
 
   const datos = {
+    nombre,
     descripcion,
     categoriaId,
     cantidad,
@@ -295,6 +327,7 @@ document.getElementById("btnGuardar").addEventListener("click", async () => {
       toast("Producto agregado.", "ok");
     }
     limpiarForm();
+    document.getElementById("cardForm").style.display = "none";
     cargarProductos();
   } catch (e) {
     console.error(e);
@@ -307,18 +340,21 @@ function limpiarForm() {
   editandoId = null;
   fotos = [];
   renderThumbs();
-  ["pDescripcion", "pUbicacion", "pPrecio", "pPrecioLote"].forEach((id) => document.getElementById(id).value = "");
+  ["pNombre", "pDescripcion", "pUbicacion", "pPrecio", "pPrecioLote"].forEach((id) => document.getElementById(id).value = "");
   document.getElementById("pCantidad").value = "1";
   document.getElementById("tituloForm").textContent = "Nuevo producto";
   document.getElementById("btnCancelarEdicion").style.display = "none";
 }
-document.getElementById("btnCancelarEdicion").addEventListener("click", limpiarForm);
+document.getElementById("btnCancelarEdicion").addEventListener("click", cerrarForm);
 
 // ================= Listado =================
 async function cargarProductos() {
-  const snap = await getDocs(query(collection(db, "productos"), orderBy("descripcion")));
+  // Sin orderBy server-side: Firestore excluye docs que no tienen el campo
+  // ordenado, y conviven productos con `nombre` (nuevos) y solo `descripcion` (viejos).
+  const snap = await getDocs(collection(db, "productos"));
   productos = [];
   snap.forEach((d) => productos.push({ id: d.id, ...d.data() }));
+  productos.sort((a, b) => nombreDe(a).localeCompare(nombreDe(b)));
   renderProductos();
 }
 
@@ -337,7 +373,8 @@ function renderProductos() {
 
   const lista = productos.filter((p) =>
     (!fCat || p.categoriaId === fCat) &&
-    (!fTxt || (p.descripcion || "").toLowerCase().includes(fTxt))
+    (!fTxt || nombreDe(p).toLowerCase().includes(fTxt) ||
+      (p.descripcion || "").toLowerCase().includes(fTxt))
   );
   if (lista.length === 0) {
     cont.innerHTML = '<p class="texto-suave">No hay productos para mostrar.</p>';
@@ -351,19 +388,28 @@ function renderProductos() {
       ? `<span class="badge ok">${p.cantidad} en stock</span>`
       : '<span class="badge error">Agotado</span>';
     const lote = p.precioLote ? " · Lote: " + fmtMoneda(p.precioLote, p.moneda) : "";
-    return `<div class="card"><div class="fila" style="align-items:flex-start;">
-      ${foto}
-      <div style="flex:1;">
-        <strong>${p.descripcion}</strong> ${badge}<br>
-        <span class="texto-suave">${nombreCat(p.categoriaId)} · ${p.ubicacion || "sin ubicación"}<br>
-        ${fmtMoneda(p.precioSugerido, p.moneda)} c/u${lote}</span>
-      </div></div>
+    const desc = p.nombre && p.descripcion
+      ? `<p class="texto-suave" style="margin:8px 0 0; white-space:pre-line;">${p.descripcion}</p>` : "";
+    return `<div class="card"><details>
+      <summary><div class="fila" style="align-items:flex-start;">
+        ${foto}
+        <div style="flex:1;">
+          <strong>${nombreDe(p)}</strong> ${badge}<br>
+          <span class="texto-suave">${nombreCat(p.categoriaId)} · ${p.ubicacion || "sin ubicación"}<br>
+          ${fmtMoneda(p.precioSugerido, p.moneda)} c/u${lote}</span>
+        </div></div>
+      </summary>
+      ${desc}
       <div class="fila">
         <button class="btn secundario btnEditar" data-id="${p.id}" style="margin-top:8px;">
           <span class="material-icons">edit</span> Editar</button>
-        <button class="btn peligro btnBorrar" data-id="${p.id}" style="margin-top:8px;">
+        <button class="btn secundario btnHistorial" data-id="${p.id}" style="margin-top:8px;">
+          <span class="material-icons">history</span> Historial</button>
+        <button class="btn peligro btnBorrar" data-id="${p.id}" style="margin-top:8px; width:auto; flex:none;">
           <span class="material-icons">delete</span></button>
-      </div></div>`;
+      </div>
+      <div class="histBox" id="hist-${p.id}" style="display:none;"></div>
+    </details></div>`;
   }).join("");
 
   cont.querySelectorAll(".btnEditar").forEach((b) => {
@@ -372,7 +418,8 @@ function renderProductos() {
       editandoId = p.id;
       fotos = (p.fotos || []).slice();
       renderThumbs();
-      document.getElementById("pDescripcion").value = p.descripcion || "";
+      document.getElementById("pNombre").value = nombreDe(p) === "—" ? "" : nombreDe(p);
+      document.getElementById("pDescripcion").value = p.nombre ? (p.descripcion || "") : "";
       document.getElementById("pCategoria").value = p.categoriaId || "";
       document.getElementById("pCantidad").value = p.cantidad != null ? p.cantidad : 0;
       document.getElementById("pUbicacion").value = p.ubicacion || "";
@@ -381,7 +428,38 @@ function renderProductos() {
       document.getElementById("pPrecioLote").value = p.precioLote != null ? p.precioLote : "";
       document.getElementById("tituloForm").textContent = "Editando producto";
       document.getElementById("btnCancelarEdicion").style.display = "block";
+      abrirForm();
       document.getElementById("cardForm").scrollIntoView({ behavior: "smooth" });
+    });
+  });
+  cont.querySelectorAll(".btnHistorial").forEach((b) => {
+    b.addEventListener("click", async () => {
+      const box = document.getElementById("hist-" + b.dataset.id);
+      if (box.style.display !== "none") { box.style.display = "none"; return; }
+      box.style.display = "block";
+      box.innerHTML = '<p class="texto-suave">Buscando compras…</p>';
+      try {
+        if (!ventasCache) {
+          const snap = await getDocs(query(collection(db, "ventas"), orderBy("fecha", "desc")));
+          ventasCache = [];
+          snap.forEach((d) => ventasCache.push(d.data()));
+        }
+        const filas = [];
+        ventasCache.forEach((v) => (v.items || []).forEach((it) => {
+          if (it.productoId === b.dataset.id) {
+            filas.push(`<div class="hist-fila">
+              <strong>${(v.comprador && v.comprador.nombre) || "—"}</strong> ·
+              ${fmtFecha(v.fecha)} · ${it.esLote ? "LOTE (" + it.cantidad + " u.)" : "×" + it.cantidad}
+              — ${fmtMoneda(it.precioFinal, it.moneda)}</div>`);
+          }
+        }));
+        box.innerHTML = filas.length > 0
+          ? '<p style="margin:10px 0 0;"><strong>Historial de compras</strong></p>' + filas.join("")
+          : '<p class="texto-suave" style="margin:10px 0 0;">Nadie compró este producto todavía.</p>';
+      } catch (e) {
+        console.error(e);
+        box.innerHTML = '<p class="texto-suave">No se pudo cargar el historial.</p>';
+      }
     });
   });
   cont.querySelectorAll(".btnBorrar").forEach((b) => {
