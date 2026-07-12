@@ -18,6 +18,7 @@
 .barra-total .fila { align-items:center; }
 main { padding-bottom:150px; }
 .opcion-lote { background:var(--c-primario-claro); border-radius:8px; padding:10px; margin-top:10px; }
+details summary::-webkit-details-marker { display:none; }
 </style>
 </head>
 <body>
@@ -41,6 +42,22 @@ main { padding-bottom:150px; }
   <div id="vistaCatalogo" style="display:none;">
     <h1 id="saludo">Hola 👋</h1>
     <p class="texto-suave" id="infoAcceso"></p>
+
+    <div class="card" style="padding:12px 16px;">
+      <details>
+        <summary style="cursor:pointer; list-style:none;">
+          <strong><span class="material-icons" style="font-size:18px; vertical-align:-4px; color:var(--c-primario);">help_outline</span>
+          ¿Cómo comprar?</strong>
+        </summary>
+        <div class="texto-suave" style="font-size:14px; line-height:1.5; margin-top:8px;">
+          <p style="margin:6px 0;">• Con <strong>+</strong> y <strong>−</strong> elegís cuántas unidades querés de cada artículo.</p>
+          <p style="margin:6px 0;">• Con <strong>Lote completo</strong> te llevás todo el stock de ese artículo a un precio especial. Si te parece mucho, podés <strong>proponer tu precio</strong> por el lote y lo conversamos.</p>
+          <p style="margin:6px 0;">• Tu selección <strong>se guarda sola</strong>: podés cerrar y volver con tu mismo link cuando quieras.</p>
+          <p style="margin:6px 0;">• Los totales van separados: pesos por un lado, dólares por el otro.</p>
+          <p style="margin:6px 0;">• Cuando estés, tocá <strong>Enviar pedido</strong>. Podés seguir ajustándolo hasta que el vendedor lo confirme; después coordinan pago y entrega por WhatsApp.</p>
+        </div>
+      </details>
+    </div>
     <div class="fila" style="margin-bottom:10px;">
       <select id="filtroCat"><option value="">Todas las categorías</option></select>
       <input type="text" id="filtroTexto" placeholder="Buscar…">
@@ -65,7 +82,7 @@ main { padding-bottom:150px; }
 
 <script type="module">
 import {
-  validarLlave, db, fmtFecha, fmtMoneda, toast,
+  validarLlave, db, fmtFecha, fmtMoneda, toast, mostrarFoto,
   doc, getDoc, setDoc, collection, getDocs, serverTimestamp
 } from "./interno/utils.js";
 
@@ -79,6 +96,9 @@ let productos = [];
 let carrito = {};      // productoId → { cantidad, esLote, propuesta }
 let estadoPedido = "abierto";
 let guardadoTimer = null;
+
+// Productos viejos solo tienen `descripcion`; se usa como nombre.
+function nombreDe(p) { return p.nombre || p.descripcion || "—"; }
 
 (async () => {
   const r = await validarLlave(codigo);
@@ -142,7 +162,7 @@ async function cargarCatalogo() {
     const p = { id: d.id, ...d.data() };
     if (p.cantidad > 0 && idsVisibles.includes(p.categoriaId)) productos.push(p);
   });
-  productos.sort((a, b) => (a.descripcion || "").localeCompare(b.descripcion || ""));
+  productos.sort((a, b) => nombreDe(a).localeCompare(nombreDe(b)));
   renderProductos();
 }
 
@@ -156,7 +176,8 @@ function renderProductos() {
 
   const lista = productos.filter((p) =>
     (!fCat || p.categoriaId === fCat) &&
-    (!fTxt || (p.descripcion || "").toLowerCase().includes(fTxt))
+    (!fTxt || nombreDe(p).toLowerCase().includes(fTxt) ||
+      (p.descripcion || "").toLowerCase().includes(fTxt))
   );
   if (lista.length === 0) {
     cont.innerHTML = '<p class="texto-suave">No hay artículos para mostrar.</p>';
@@ -165,7 +186,7 @@ function renderProductos() {
   cont.innerHTML = lista.map((p) => {
     const sel = carrito[p.id] || { cantidad: 0, esLote: false, propuesta: "" };
     const foto = (p.fotos && p.fotos[0])
-      ? `<img class="prod-foto" src="${p.fotos[0]}">`
+      ? `<img class="prod-foto fotoProd" data-id="${p.id}" src="${p.fotos[0]}">`
       : `<span class="material-icons prod-foto" style="font-size:44px; color:var(--c-borde); text-align:center; line-height:84px;">image</span>`;
 
     let controles;
@@ -193,18 +214,26 @@ function renderProductos() {
         </div>`;
     }
 
+    const desc = p.nombre && p.descripcion
+      ? `<br><span class="texto-suave" style="font-size:13px; white-space:pre-line;">${p.descripcion}</span>` : "";
     return `<div class="card">
       <div class="fila" style="align-items:flex-start;">
         ${foto}
         <div style="flex:1;">
-          <strong>${p.descripcion}</strong><br>
-          <span class="texto-suave">${fmtMoneda(p.precioSugerido, p.moneda)} c/u · ${p.cantidad} disponibles</span>
+          <strong>${nombreDe(p)}</strong><br>
+          <span class="texto-suave">${fmtMoneda(p.precioSugerido, p.moneda)} c/u · ${p.cantidad} disponibles</span>${desc}
         </div>
       </div>
       ${controles}
     </div>`;
   }).join("");
 
+  cont.querySelectorAll(".fotoProd").forEach((im) => {
+    im.addEventListener("click", () => {
+      const p = productos.find((x) => x.id === im.dataset.id);
+      if (p && p.fotos && p.fotos.length > 0) mostrarFoto(p.fotos, 0);
+    });
+  });
   cont.querySelectorAll(".btnMas").forEach((b) => b.addEventListener("click", () => cambiar(b.dataset.id, 1)));
   cont.querySelectorAll(".btnMenos").forEach((b) => b.addEventListener("click", () => cambiar(b.dataset.id, -1)));
   cont.querySelectorAll(".btnLote").forEach((b) => b.addEventListener("click", () => setLote(b.dataset.id, true)));
@@ -247,7 +276,7 @@ function calcularItems() {
     const precioLote = p.precioLote != null ? p.precioLote : p.precioSugerido * p.cantidad;
     items.push({
       productoId: id,
-      descripcion: p.descripcion,
+      descripcion: nombreDe(p), // nombre visible en pedidos/ventas (campo histórico)
       moneda: p.moneda,
       precioUnit: p.precioSugerido,
       cantidad: sel.esLote ? p.cantidad : sel.cantidad,
