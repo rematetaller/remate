@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.3)
+// utils.js — Núcleo compartido de remateTaller (v1.4)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 // =====================================================
@@ -232,6 +232,63 @@ export async function subirFoto(file, carpeta, maxLado = 2000) {
     throw new Error("Cloudinary: " + detalle);
   }
   return data.secure_url;
+}
+
+// =====================================================
+// AYUDA CONTEXTUAL — botón "?" junto al título de la página
+// Cada página llama iniciarAyuda(titulo, htmlDeAyuda).
+// =====================================================
+
+const AYUDA_CSS = `
+#modalAyuda { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
+  z-index:500; align-items:flex-end; justify-content:center; }
+#modalAyuda .ayuda-caja { background:var(--c-superficie, #fff); width:100%; max-width:540px;
+  max-height:85vh; overflow-y:auto; border-radius:16px 16px 0 0; padding:14px 18px 28px; }
+#modalAyuda .ayuda-top { display:flex; justify-content:space-between; align-items:center;
+  border-bottom:1px solid var(--c-borde, #ddd); padding-bottom:8px; margin-bottom:4px; }
+#modalAyuda .ayuda-top button { border:none; background:none; padding:4px; font-size:24px; cursor:pointer; }
+#modalAyuda h3 { margin:16px 0 4px; font-size:15px; }
+#modalAyuda p, #modalAyuda li { font-size:14px; line-height:1.5; margin:6px 0; }
+#modalAyuda ul { padding-left:18px; margin:4px 0; }
+.icono-ayuda { font-size:22px; color:var(--c-primario, #1a73e8); vertical-align:middle;
+  margin-left:8px; cursor:pointer; }
+`;
+
+function asegurarModalAyuda() {
+  if (document.getElementById("modalAyuda")) return;
+  const st = document.createElement("style");
+  st.textContent = AYUDA_CSS;
+  document.head.appendChild(st);
+  const m = document.createElement("div");
+  m.id = "modalAyuda";
+  m.innerHTML = `<div class="ayuda-caja">
+    <div class="ayuda-top"><strong id="ayudaTitulo"></strong>
+      <button id="ayudaCerrar" class="material-icons" aria-label="Cerrar">close</button></div>
+    <div id="ayudaCuerpo"></div>
+  </div>`;
+  document.body.appendChild(m);
+  m.addEventListener("click", (e) => { if (e.target === m) m.style.display = "none"; });
+  m.querySelector("#ayudaCerrar").addEventListener("click", () => { m.style.display = "none"; });
+}
+
+export function mostrarAyuda(titulo, html) {
+  asegurarModalAyuda();
+  const m = document.getElementById("modalAyuda");
+  m.querySelector("#ayudaTitulo").textContent = titulo;
+  m.querySelector("#ayudaCuerpo").innerHTML = html;
+  m.style.display = "flex";
+}
+
+/** Agrega el ícono "?" al h1 de la página, que abre la ayuda contextual. */
+export function iniciarAyuda(titulo, html) {
+  const h1 = document.querySelector("main h1");
+  if (!h1 || h1.querySelector(".icono-ayuda")) return;
+  const b = document.createElement("span");
+  b.className = "material-icons icono-ayuda";
+  b.textContent = "help_outline";
+  b.setAttribute("role", "button");
+  b.addEventListener("click", () => mostrarAyuda(titulo, html));
+  h1.appendChild(b);
 }
 
 // =====================================================

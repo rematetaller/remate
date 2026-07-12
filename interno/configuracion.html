@@ -64,10 +64,24 @@
 
 <script type="module">
 import {
-  verificarAuth, renderNav, db, toast,
+  verificarAuth, renderNav, db, toast, iniciarAyuda,
   doc, getDoc, setDoc, updateDoc, collection, getDocs,
   serverTimestamp, soloDigitos, fmtFecha
 } from "./utils.js";
+
+iniciarAyuda("Qué se configura acá", `
+<h3>Contacto y textos públicos</h3>
+<ul>
+<li><strong>WhatsApp de contacto:</strong> a ese número llegan los compradores cuando su llave venció, fue revocada o no tienen una. Mantenelo actualizado: es la vía de rescate de cualquier acceso caído.</li>
+<li><strong>Textos:</strong> son los mensajes que ve el comprador en cada situación (bienvenida, llave vencida, sin llave) y el mensaje precargado al compartir una llave por WhatsApp. Los cambios rigen al instante.</li>
+</ul>
+<h3>Usuarios administradores</h3>
+<ul>
+<li>Acá se edita el nombre visible (aparece en ventas: quién vendió, cobró o entregó) y se <strong>activa/desactiva</strong> cada usuario. Desactivado no puede entrar al panel.</li>
+<li>Nadie puede desactivarse a sí mismo, para no dejar el sistema sin administradores.</li>
+<li>Los usuarios nuevos se crean en la consola de Firebase (Authentication) y después se les crea su ficha acá; las contraseñas no se comparten nunca.</li>
+</ul>
+`);
 
 let uidActual = null;
 

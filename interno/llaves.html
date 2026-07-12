@@ -68,11 +68,29 @@ details summary::-webkit-details-marker { display:none; }
 
 <script type="module">
 import {
-  verificarAuth, renderNav, db, toast,
+  verificarAuth, renderNav, db, toast, iniciarAyuda,
   doc, setDoc, updateDoc, collection, getDocs, query, orderBy,
   serverTimestamp, generarCodigoLlave, urlBasePublica,
   fmtFecha, fmtMoneda, tsAms, soloDigitos
 } from "./utils.js";
+
+iniciarAyuda("Cómo funcionan las llaves", `
+<p>Una llave es el <strong>acceso personal y temporal</strong> de un comprador al catálogo. Sin llave vigente no puede ver productos ni armar pedidos.</p>
+<h3>Al crearla</h3>
+<ul>
+<li><strong>Nombre y teléfono:</strong> identifican al comprador en pedidos y ventas.</li>
+<li><strong>Categorías:</strong> definen qué parte del catálogo ve. Sin marcar ninguna, ve <strong>todo</strong>.</li>
+<li><strong>Duración:</strong> desde que se crea (no desde el primer uso). Vencida, el comprador ve un aviso con botón de WhatsApp para pedir renovación.</li>
+</ul>
+<h3>Durante su vida</h3>
+<ul>
+<li><strong>Compartir:</strong> abre WhatsApp con el mensaje y el link listos. El comprador también puede escribir el código a mano en la página principal.</li>
+<li><strong>Revocar:</strong> corta el acceso al instante, aunque no haya vencido. Úsala si se compartió de más o la negociación se cortó.</li>
+<li>Cada llave admite <strong>un único pedido</strong>. Si su pedido fue validado o descartado y el comprador quiere comprar de nuevo, generale una llave nueva.</li>
+</ul>
+<h3>Historial</h3>
+<p>En la tarjeta de cada llave se listan las compras ya validadas de ese comprador, de la más reciente a la más vieja.</p>
+`);
 
 let uidActual = null;
 let categorias = [];

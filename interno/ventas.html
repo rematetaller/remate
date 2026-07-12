@@ -53,10 +53,28 @@ details summary::-webkit-details-marker { display:none; }
 
 <script type="module">
 import {
-  verificarAuth, renderNav, db, toast, fmtMoneda, fmtFecha,
+  verificarAuth, renderNav, db, toast, fmtMoneda, fmtFecha, iniciarAyuda,
   doc, getDoc, updateDoc, addDoc, collection, getDocs, query, orderBy,
   serverTimestamp
 } from "./utils.js";
+
+iniciarAyuda("Cómo se gestiona una venta", `
+<p>Una venta nace al validar un pedido y es un registro <strong>inmutable</strong>: los artículos y precios no cambian más. Lo que sí se gestiona acá es el <strong>pago</strong> y la <strong>entrega</strong>.</p>
+<h3>Estados de pago (automáticos)</h3>
+<p><span class="badge error">Sin pagar</span> No hay ningún pago registrado.</p>
+<p><span class="badge aviso">Pago parcial</span> Se registraron pagos pero falta llegar al total. El saldo pendiente se muestra por moneda.</p>
+<p><span class="badge ok">Pagada</span> Los pagos registrados cubren el total en todas las monedas. Se marca solo: no hay que hacerlo a mano.</p>
+<h3>Registrar un pago</h3>
+<ul>
+<li>Cargá monto, moneda y método. En <strong>Detalle</strong> anotá cómo se concretó (seña, banco, "resto al retirar"…). Cuanto más claro, mejor trazabilidad.</li>
+<li>Si el método acordado no está en la lista, elegí <strong>➕ Nuevo método</strong> y queda disponible para las próximas ventas.</li>
+<li>Cada pago guarda quién lo registró y cuándo: si uno cobra y otro entrega, los dos ven lo mismo.</li>
+</ul>
+<h3>Estados de entrega (manuales)</h3>
+<p><span class="badge neutro">Pendiente</span> → <span class="badge aviso">Preparada</span> (mercadería lista y apartada) → <span class="badge ok">Entregada</span> (en manos del comprador). Cada cambio queda en el historial con quién y cuándo.</p>
+<h3>Preparar el paquete</h3>
+<p>Tocá cualquier artículo de la venta para ver sus fotos, descripción y <strong>ubicación en el depósito</strong>.</p>
+`);
 
 let ventas = [];
 let metodos = [];              // métodos de pago custom (colección metodosPago)

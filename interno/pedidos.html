@@ -34,10 +34,26 @@ details summary::-webkit-details-marker { display:none; }
 
 <script type="module">
 import {
-  verificarAuth, renderNav, db, toast, fmtMoneda, fmtFecha,
+  verificarAuth, renderNav, db, toast, fmtMoneda, fmtFecha, iniciarAyuda,
   doc, getDoc, updateDoc, setDoc, collection, getDocs, query, orderBy,
   serverTimestamp
 } from "./utils.js";
+
+iniciarAyuda("Cómo funcionan los pedidos", `
+<h3>Estados de un pedido</h3>
+<p><span class="badge neutro">Abierto</span> El comprador está armando su carrito (se guarda solo, apenas agrega algo). Todavía no lo envió: es interés, no un pedido formal.</p>
+<p><span class="badge aviso">Enviado</span> El comprador tocó "Enviar pedido". Es el estado que espera tu acción: revisar, ajustar y decidir. Ojo: puede seguir modificando su carrito hasta que lo valides o descartes.</p>
+<p><span class="badge ok">Validado</span> Confirmaste la venta. Es el paso sin retorno: se descuenta el stock, el comprador ya no puede editar, y queda el registro en <strong>Ventas</strong> — ahí se sigue la preparación, la entrega y los pagos.</p>
+<p><span class="badge error">Descartado</span> La negociación no prosperó. No descuenta stock ni genera venta. Queda registrado quién lo descartó.</p>
+<h3>Acciones sobre un pedido</h3>
+<ul>
+<li><strong>Guardar:</strong> guarda tus ajustes de cantidades y precios finales sin cerrar nada. Podés negociar de a poco.</li>
+<li><strong>Precio final por renglón:</strong> es lo que efectivamente se cobra. Sirve para aceptar o contraofertar las propuestas de lote (marcadas con badge).</li>
+<li><strong>Validar venta:</strong> usalo solo cuando el acuerdo está cerrado con el comprador.</li>
+<li><strong>Descartar:</strong> cierra sin venta. La llave de ese comprador ya no puede armar otro pedido; si la negociación se retoma, generale una llave nueva desde Llaves.</li>
+</ul>
+<p>Flujo normal: Abierto → Enviado → Validado (o Descartado).</p>
+`);
 
 let pedidos = [];
 let usuarioActual = null;

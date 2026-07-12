@@ -124,10 +124,28 @@ textarea { width:100%; padding:10px; border:1px solid var(--c-borde); border-rad
 
 <script type="module">
 import {
-  verificarAuth, renderNav, db, toast, subirFoto, fmtMoneda, fmtFecha,
+  verificarAuth, renderNav, db, toast, subirFoto, fmtMoneda, fmtFecha, iniciarAyuda,
   doc, setDoc, addDoc, updateDoc, deleteDoc, collection, getDocs,
   query, where, orderBy, serverTimestamp, getCountFromServer
 } from "./utils.js";
+
+iniciarAyuda("Cómo funciona el inventario", `
+<h3>Categorías</h3>
+<ul>
+<li><strong>Tocar el nombre</strong> la activa/desactiva. Desactivada no se ofrece al crear productos ni llaves, pero sus productos existentes siguen visibles.</li>
+<li><strong>✏️</strong> renombra (se actualiza en todo el sistema). <strong>🗑️</strong> elimina, solo si no tiene productos: si tiene, reasignalos o desactivala.</li>
+<li>Las categorías también definen qué ve cada comprador: al crear una llave se elige cuáles habilita.</li>
+</ul>
+<h3>Productos</h3>
+<ul>
+<li><strong>Nombre:</strong> corto, es lo que se ve en catálogos, pedidos y ventas. <strong>Descripción:</strong> opcional, para detalles (marca, estado, medidas).</li>
+<li><strong>Precio unitario:</strong> el precio por unidad que ve el comprador. <strong>Precio de lote:</strong> opcional, precio especial por llevarse todo el stock; el comprador además puede proponer otro valor por el lote.</li>
+<li><strong>Estado:</strong> automático según stock — con cantidad 0 aparece como agotado y deja de ofrecerse. No hace falta tocarlo: al validar ventas el stock se descuenta solo.</li>
+<li><strong>Fotos:</strong> por cámara o galería; se comprimen solas antes de subir.</li>
+</ul>
+<h3>Lista de productos</h3>
+<p>Tocá una tarjeta para expandirla: <strong>Editar</strong> (modifica el producto), <strong>Historial</strong> (quién lo compró, cuándo y a qué precio) y <strong>Eliminar</strong> (definitivo; si el producto se vendió alguna vez, conviene dejarlo en cantidad 0 en vez de borrarlo, para conservar la referencia).</p>
+`);
 
 let cats = [];        // [{id, nombre, activa}]
 let productos = [];   // [{id, ...datos}]
