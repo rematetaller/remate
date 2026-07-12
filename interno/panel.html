@@ -30,22 +30,23 @@
   </div>
 
   <div class="card">
-    <h2 style="margin-top:0;">Primeros pasos</h2>
+    <h2 style="margin-top:0;">El circuito completo</h2>
     <p class="texto-suave">
-      Empezá cargando el inventario del depósito desde
-      <strong>Inventario</strong>. Cuando tengas productos cargados,
-      generá una <strong>Llave</strong> para invitar a un comprador.
+      <strong>1. Inventario:</strong> cargá categorías y productos con fotos.<br>
+      <strong>2. Llaves:</strong> generá un acceso para cada comprador y compartilo por WhatsApp.<br>
+      <strong>3. Pedidos:</strong> revisá lo que enviaron, ajustá precios y validá la venta.<br>
+      <strong>4. Ventas:</strong> registrá los pagos y marcá la preparación y entrega.
     </p>
-    <p class="texto-suave" id="estadoPaginas">
-      Las secciones Inventario, Llaves, Pedidos y Ventas se habilitan
-      en las próximas tandas de desarrollo.
+    <p class="texto-suave">
+      En cada sección, el <span class="material-icons" style="font-size:16px; vertical-align:-3px;">help_outline</span>
+      junto al título explica sus estados y acciones.
     </p>
   </div>
 </main>
 
 <script type="module">
 import {
-  verificarAuth, renderNav, db,
+  verificarAuth, renderNav, db, iniciarAyuda,
   collection, query, where, getDocs, getCountFromServer
 } from "./utils.js";
 
@@ -53,6 +54,27 @@ verificarAuth(async (user, datos) => {
   renderNav("panel");
   document.getElementById("saludo").textContent =
     "Hola, " + (datos.nombre || "admin") + " 👋";
+
+  // Después de setear el saludo (que reemplaza el contenido del h1),
+  // se agrega el ícono de ayuda.
+  iniciarAyuda("Cómo funciona remateTaller", `
+<p>El sistema vacía el depósito en un circuito de 4 pasos. Cada venta queda registrada con trazabilidad completa: quién vendió, quién cobró y quién entregó.</p>
+<h3>El flujo de una venta</h3>
+<ul>
+<li><strong>Inventario:</strong> el catálogo interno. Productos con fotos, precio unitario y precio especial por el lote completo.</li>
+<li><strong>Llaves:</strong> el acceso de cada comprador — temporal, individual y limitado a las categorías que elijas.</li>
+<li><strong>Pedidos:</strong> lo que los compradores arman y envían. Se revisa, se negocia (propuestas de lote) y se <strong>valida</strong>: ahí se descuenta el stock.</li>
+<li><strong>Ventas:</strong> el registro definitivo. Acá se cobran los pagos (parciales o totales) y se marca la preparación y entrega.</li>
+</ul>
+<h3>Los números de arriba</h3>
+<ul>
+<li><strong>Productos:</strong> total cargado en inventario.</li>
+<li><strong>Llaves activas:</strong> accesos vigentes (ni vencidos ni revocados).</li>
+<li><strong>Pedidos enviados:</strong> los que esperan tu revisión — si hay un número acá, hay trabajo en Pedidos.</li>
+</ul>
+<h3>Configuración</h3>
+<p>Textos públicos, WhatsApp de contacto y usuarios administradores.</p>
+`);
 
   // KPIs (tolerantes a colecciones vacías o inexistentes)
   cargarKpi("kpiProductos", () =>
