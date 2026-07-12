@@ -53,7 +53,7 @@ details summary::-webkit-details-marker { display:none; }
 
 <script type="module">
 import {
-  verificarAuth, renderNav, db, toast, fmtMoneda, fmtFecha, iniciarAyuda,
+  verificarAuth, renderNav, db, toast, fmtMoneda, fmtFecha, iniciarAyuda, mostrarFoto,
   doc, getDoc, updateDoc, addDoc, collection, getDocs, query, orderBy,
   serverTimestamp
 } from "./utils.js";
@@ -399,12 +399,16 @@ async function mostrarDetalle(prodId, box) {
     const nombre = p.nombre || p.descripcion || "—";
     const desc = (p.nombre && p.descripcion)
       ? `<br><span class="texto-suave" style="white-space:pre-line;">${p.descripcion}</span>` : "";
-    const fotos = (p.fotos || []).map((u) =>
-      `<a href="${u}" target="_blank" rel="noopener"><img class="thumb" src="${u}"></a>`).join("");
+    const fotosArr = p.fotos || [];
+    const fotos = fotosArr.map((u, i) =>
+      `<img class="thumb thumbAmpliar" data-i="${i}" src="${u}">`).join("");
     box.innerHTML = `<strong>${nombre}</strong>${desc}<br>
       <span class="texto-suave"><span class="material-icons" style="font-size:15px; vertical-align:-3px;">place</span>
       ${p.ubicacion || "sin ubicación"}</span>
       ${fotos ? `<div class="thumbs">${fotos}</div>` : ""}`;
+    box.querySelectorAll(".thumbAmpliar").forEach((im) => {
+      im.addEventListener("click", () => mostrarFoto(fotosArr, Number(im.dataset.i)));
+    });
     box.dataset.cargado = "1";
   } catch (e) {
     console.error(e);

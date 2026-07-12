@@ -124,7 +124,7 @@ textarea { width:100%; padding:10px; border:1px solid var(--c-borde); border-rad
 
 <script type="module">
 import {
-  verificarAuth, renderNav, db, toast, subirFoto, fmtMoneda, fmtFecha, iniciarAyuda,
+  verificarAuth, renderNav, db, toast, subirFoto, fmtMoneda, fmtFecha, iniciarAyuda, mostrarFoto,
   doc, setDoc, addDoc, updateDoc, deleteDoc, collection, getDocs,
   query, where, orderBy, serverTimestamp, getCountFromServer
 } from "./utils.js";
@@ -297,11 +297,14 @@ document.getElementById("pFotosGaleria").addEventListener("change", procesarFoto
 
 function renderThumbs() {
   document.getElementById("thumbs").innerHTML = fotos.map((u, i) =>
-    `<div class="thumb-wrap"><img class="thumb" src="${u}">
+    `<div class="thumb-wrap"><img class="thumb thumbVer" data-i="${i}" src="${u}">
      <div class="thumb-x" data-i="${i}">×</div></div>`
   ).join("");
   document.querySelectorAll(".thumb-x").forEach((x) => {
     x.addEventListener("click", () => { fotos.splice(Number(x.dataset.i), 1); renderThumbs(); });
+  });
+  document.querySelectorAll(".thumbVer").forEach((im) => {
+    im.addEventListener("click", () => mostrarFoto(fotos, Number(im.dataset.i)));
   });
 }
 
@@ -400,7 +403,7 @@ function renderProductos() {
   }
   cont.innerHTML = lista.map((p) => {
     const foto = (p.fotos && p.fotos[0])
-      ? `<img class="prod-foto" src="${p.fotos[0]}">`
+      ? `<img class="prod-foto fotoProd" data-id="${p.id}" src="${p.fotos[0]}">`
       : `<span class="material-icons prod-foto" style="font-size:40px; color:var(--c-borde); text-align:center; line-height:72px;">image</span>`;
     const badge = p.cantidad > 0
       ? `<span class="badge ok">${p.cantidad} en stock</span>`
@@ -430,6 +433,15 @@ function renderProductos() {
     </details></div>`;
   }).join("");
 
+  cont.querySelectorAll(".fotoProd").forEach((im) => {
+    im.addEventListener("click", (e) => {
+      // La foto vive dentro del <summary>: evitar que el toque abra/cierre la tarjeta.
+      e.preventDefault();
+      e.stopPropagation();
+      const p = productos.find((x) => x.id === im.dataset.id);
+      if (p && p.fotos && p.fotos.length > 0) mostrarFoto(p.fotos, 0);
+    });
+  });
   cont.querySelectorAll(".btnEditar").forEach((b) => {
     b.addEventListener("click", () => {
       const p = productos.find((x) => x.id === b.dataset.id);

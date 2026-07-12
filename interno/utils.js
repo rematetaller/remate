@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.4)
+// utils.js — Núcleo compartido de remateTaller (v1.5)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 // =====================================================
@@ -232,6 +232,75 @@ export async function subirFoto(file, carpeta, maxLado = 2000) {
     throw new Error("Cloudinary: " + detalle);
   }
   return data.secure_url;
+}
+
+// =====================================================
+// VISOR DE FOTOS — pantalla completa, con navegación
+// mostrarFoto(urls, indice): urls puede ser un array o una sola url.
+// =====================================================
+
+const VISOR_CSS = `
+#visorFoto { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.92);
+  z-index:600; align-items:center; justify-content:center; }
+#visorFoto img { max-width:96vw; max-height:88vh; object-fit:contain; border-radius:4px; }
+#visorFoto button { position:absolute; background:rgba(255,255,255,0.18); color:#fff;
+  border:none; border-radius:50%; width:44px; height:44px; font-size:28px;
+  display:flex; align-items:center; justify-content:center; cursor:pointer; }
+#visorCerrar { top:14px; right:14px; }
+#visorPrev { left:8px; top:50%; transform:translateY(-50%); }
+#visorNext { right:8px; top:50%; transform:translateY(-50%); }
+#visorContador { position:absolute; top:26px; left:16px; color:#fff; font-size:14px; }
+`;
+
+let visorUrls = [];
+let visorIdx = 0;
+
+function asegurarVisorFoto() {
+  if (document.getElementById("visorFoto")) return;
+  const st = document.createElement("style");
+  st.textContent = VISOR_CSS;
+  document.head.appendChild(st);
+  const v = document.createElement("div");
+  v.id = "visorFoto";
+  v.innerHTML = `
+    <img id="visorImg" alt="Foto ampliada">
+    <button id="visorCerrar" class="material-icons" aria-label="Cerrar">close</button>
+    <button id="visorPrev" class="material-icons" aria-label="Anterior">chevron_left</button>
+    <button id="visorNext" class="material-icons" aria-label="Siguiente">chevron_right</button>
+    <span id="visorContador"></span>`;
+  document.body.appendChild(v);
+  const cerrar = () => { v.style.display = "none"; };
+  v.addEventListener("click", (e) => { if (e.target === v) cerrar(); });
+  v.querySelector("#visorCerrar").addEventListener("click", cerrar);
+  v.querySelector("#visorPrev").addEventListener("click", (e) => {
+    e.stopPropagation();
+    visorIdx = (visorIdx - 1 + visorUrls.length) % visorUrls.length;
+    visorRender();
+  });
+  v.querySelector("#visorNext").addEventListener("click", (e) => {
+    e.stopPropagation();
+    visorIdx = (visorIdx + 1) % visorUrls.length;
+    visorRender();
+  });
+}
+
+function visorRender() {
+  const v = document.getElementById("visorFoto");
+  v.querySelector("#visorImg").src = visorUrls[visorIdx] || "";
+  const varias = visorUrls.length > 1;
+  v.querySelector("#visorContador").textContent =
+    varias ? (visorIdx + 1) + " / " + visorUrls.length : "";
+  v.querySelector("#visorPrev").style.display = varias ? "flex" : "none";
+  v.querySelector("#visorNext").style.display = varias ? "flex" : "none";
+}
+
+export function mostrarFoto(fotos, indice = 0) {
+  visorUrls = (Array.isArray(fotos) ? fotos : [fotos]).filter(Boolean);
+  if (visorUrls.length === 0) return;
+  visorIdx = Math.min(Math.max(0, indice), visorUrls.length - 1);
+  asegurarVisorFoto();
+  visorRender();
+  document.getElementById("visorFoto").style.display = "flex";
 }
 
 // =====================================================
