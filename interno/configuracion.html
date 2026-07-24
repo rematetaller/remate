@@ -6,6 +6,11 @@
 <title>Configuración — remateTaller</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
 <link rel="stylesheet" href="design-system.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#b45309">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 </head>
 <body>
 
@@ -50,16 +55,29 @@
 
   <!-- ============ Usuarios administradores ============ -->
   <h2>Usuarios administradores</h2>
-  <div id="listaUsuarios"><p class="texto-suave">Cargando…</p></div>
+
   <div class="card">
-    <p class="texto-suave" style="margin:0;">
-      <span class="material-icons" style="font-size:16px; vertical-align:middle;">info</span>
-      Para sumar un usuario nuevo: crearlo en la consola de Firebase
-      (Authentication → Agregar usuario) y pasarle el <strong>uid</strong> al
-      desarrollo para incorporarlo al sistema. Desactivar un usuario le corta
-      el acceso de inmediato.
+    <h2 style="margin-top:0;">Agregar usuario</h2>
+    <p class="texto-suave">
+      Primero hay que crearlo en la consola de Firebase (Authentication → Agregar usuario).
+      Una vez creado, pegá acá su <strong>UID</strong> para darle su ficha y acceso al panel.
     </p>
+
+    <label for="inpNuevoUid">UID (de Firebase Authentication)</label>
+    <input type="text" id="inpNuevoUid" autocomplete="off" placeholder="Ej: 6HnSCkjKGEWKv39f37HJRpLEToV2">
+
+    <label for="inpNuevoEmail">Email</label>
+    <input type="email" id="inpNuevoEmail" autocomplete="off" inputmode="email">
+
+    <label for="inpNuevoNombre">Nombre visible</label>
+    <input type="text" id="inpNuevoNombre" autocomplete="off" placeholder="Aparece en ventas: quién vendió, cobró o entregó">
+
+    <button class="btn" id="btnAgregarUsuario">
+      <span class="material-icons">person_add</span> Agregar usuario
+    </button>
   </div>
+
+  <div id="listaUsuarios"><p class="texto-suave">Cargando…</p></div>
 </main>
 
 <script type="module">
@@ -79,7 +97,7 @@ iniciarAyuda("Qué se configura acá", `
 <ul>
 <li>Acá se edita el nombre visible (aparece en ventas: quién vendió, cobró o entregó) y se <strong>activa/desactiva</strong> cada usuario. Desactivado no puede entrar al panel.</li>
 <li>Nadie puede desactivarse a sí mismo, para no dejar el sistema sin administradores.</li>
-<li>Los usuarios nuevos se crean en la consola de Firebase (Authentication) y después se les crea su ficha acá; las contraseñas no se comparten nunca.</li>
+<li>Los usuarios nuevos se crean primero en la consola de Firebase (Authentication); después, con su UID, se les crea la ficha acá mismo, en "Agregar usuario". Las contraseñas no se comparten nunca.</li>
 </ul>
 `);
 
@@ -131,6 +149,42 @@ document.getElementById("btnGuardar").addEventListener("click", async () => {
   } catch (e) {
     console.error(e);
     toast("No se pudo guardar.", "error");
+  }
+  btn.disabled = false;
+});
+
+// ---------- Agregar usuario ----------
+document.getElementById("btnAgregarUsuario").addEventListener("click", async () => {
+  const uid = document.getElementById("inpNuevoUid").value.trim();
+  const email = document.getElementById("inpNuevoEmail").value.trim();
+  const nombre = document.getElementById("inpNuevoNombre").value.trim();
+
+  if (!uid) { toast("Pegá el UID del usuario (lo copiás de Firebase Authentication).", "error"); return; }
+  if (!email) { toast("Cargá el email.", "error"); return; }
+  if (!nombre) { toast("Cargá el nombre visible.", "error"); return; }
+
+  const btn = document.getElementById("btnAgregarUsuario");
+  btn.disabled = true;
+  try {
+    const ref = doc(db, "usuarios", uid);
+    const existente = await getDoc(ref);
+    if (existente.exists()) {
+      toast("Ese UID ya tiene una ficha creada.", "error");
+      btn.disabled = false;
+      return;
+    }
+    await setDoc(ref, {
+      email, nombre, rol: "admin", activo: true,
+      creadoEn: serverTimestamp(), creadoPor: uidActual
+    });
+    toast("Usuario agregado. Ya puede ingresar con su email y contraseña.", "ok");
+    document.getElementById("inpNuevoUid").value = "";
+    document.getElementById("inpNuevoEmail").value = "";
+    document.getElementById("inpNuevoNombre").value = "";
+    await cargarUsuarios();
+  } catch (e) {
+    console.error(e);
+    toast("No se pudo agregar el usuario.", "error");
   }
   btn.disabled = false;
 });
@@ -194,6 +248,11 @@ async function cargarUsuarios() {
     console.error(e);
     cont.innerHTML = '<p class="texto-suave">Error cargando los usuarios.</p>';
   }
+}
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
 }
 </script>
 </body>
