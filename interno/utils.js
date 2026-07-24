@@ -1,0 +1,407 @@
+// =====================================================
+// utils.js — Núcleo compartido de remateTaller (v1.5)
+// Toda página (interna y pública) importa desde acá.
+// Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
+// =====================================================
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
+  getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
+  collection, getDocs, query, where, orderBy, limit,
+  serverTimestamp, onSnapshot, getCountFromServer
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ---------- Configuración Firebase (pública por diseño) ----------
+const firebaseConfig = {
+  apiKey: "AIzaSyB2ZT8nLzhcejyqdOA1Ipuwaipm3KTAaRU",
+  authDomain: "remate-acbc9.firebaseapp.com",
+  projectId: "remate-acbc9",
+  storageBucket: "remate-acbc9.firebasestorage.app",
+  messagingSenderId: "815214584678",
+  appId: "1:815214584678:web:3fd234a6e92eed932e5ea7"
+};
+
+export const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+
+// Re-export de helpers de Firestore para las páginas.
+export {
+  doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
+  collection, getDocs, query, where, orderBy, limit,
+  serverTimestamp, onSnapshot, getCountFromServer,
+  signInWithEmailAndPassword
+};
+
+// ---------- Cloudinary (cuenta propia de remateTaller) ----------
+// Solo cloud name + preset unsigned. El api_secret NUNCA va en el cliente.
+export const CLOUDINARY = {
+  cloud: "r9u5oous",
+  preset: "preset-remate" // unsigned preset — crearlo en Cloudinary si no existe
+};
+
+// ---------- Administradores iniciales ----------
+// En el primer login se les crea automáticamente su doc en `usuarios`.
+// Solo estos uid se auto-provisionan; cualquier otro queda afuera.
+const ADMINS_INICIALES = {
+  "6HnSCkjKGEWKv39f37HJRpLEToV2": "Florencia",
+  "R9b8YLM66mdrY8FTC8gEjBNaOr92": "Mauro"
+};
+
+// =====================================================
+// AUTENTICACIÓN Y CONTROL DE ACCESO (admins)
+// =====================================================
+
+/**
+ * Verifica sesión + usuario activo en Firestore.
+ * Auto-crea el doc de usuario si el uid está en ADMINS_INICIALES.
+ * Sin sesión o inactivo → login.html.
+ * callback(user, datosUsuario)
+ */
+export function verificarAuth(callback) {
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) { window.location.href = "login.html"; return; }
+    try {
+      const ref = doc(db, "usuarios", user.uid);
+      let snap = await getDoc(ref);
+
+      if (!snap.exists() && ADMINS_INICIALES[user.uid]) {
+        await setDoc(ref, {
+          nombre: ADMINS_INICIALES[user.uid],
+          email: user.email || "",
+          rol: "admin",
+          activo: true,
+          creadoEn: serverTimestamp()
+        });
+        snap = await getDoc(ref);
+      }
+
+      if (!snap.exists() || snap.data().activo === false) {
+        await signOut(auth);
+        window.location.href = "login.html";
+        return;
+      }
+      callback(user, snap.data());
+    } catch (e) {
+      console.error("Error verificando usuario:", e);
+      window.location.href = "login.html";
+    }
+  });
+}
+
+export async function cerrarSesion() {
+  await signOut(auth);
+  window.location.href = "login.html";
+}
+
+// =====================================================
+// LLAVES DE ACCESO (compradores) — usado por páginas públicas
+// =====================================================
+
+/**
+ * Valida una llave contra la base.
+ * Devuelve { ok, motivo, datos }:
+ *   ok=true  → llave vigente
+ *   motivo: 'sin-codigo' | 'inexistente' | 'revocada' | 'vencida'
+ */
+export async function validarLlave(codigo) {
+  if (!codigo) return { ok: false, motivo: "sin-codigo" };
+  try {
+    const snap = await getDoc(doc(db, "llaves", String(codigo).trim().toUpperCase()));
+    if (!snap.exists()) return { ok: false, motivo: "inexistente" };
+    const d = snap.data();
+    if (d.revocada) return { ok: false, motivo: "revocada", datos: d };
+    const vence = tsAms(d.venceEn);
+    if (!vence || Date.now() > vence) return { ok: false, motivo: "vencida", datos: d };
+    return { ok: true, datos: d };
+  } catch (e) {
+    console.error("Error validando llave:", e);
+    return { ok: false, motivo: "error" };
+  }
+}
+
+/** Lee la configuración pública (textos, WhatsApp de contacto). */
+export async function leerConfigPublico() {
+  try {
+    const snap = await getDoc(doc(db, "config", "publico"));
+    return snap.exists() ? snap.data() : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+/** Convierte Timestamp | Date | ms → ms (o 0). */
+export function tsAms(v) {
+  if (!v) return 0;
+  if (v.toDate) return v.toDate().getTime();
+  if (v instanceof Date) return v.getTime();
+  return Number(v) || 0;
+}
+
+// =====================================================
+// NAVEGACIÓN INTERNA (mobile-first)
+// =====================================================
+
+const NAV_ITEMS = [
+  { id: "panel",         label: "Inicio",     icon: "home",          href: "panel.html" },
+  { id: "inventario",    label: "Inventario", icon: "inventory_2",   href: "inventario.html" },
+  { id: "llaves",        label: "Llaves",     icon: "vpn_key",       href: "llaves.html" },
+  { id: "pedidos",       label: "Pedidos",    icon: "shopping_cart", href: "pedidos.html" },
+  { id: "ventas",        label: "Ventas",     icon: "receipt_long",  href: "ventas.html" },
+  { id: "configuracion", label: "Config.",    icon: "settings",      href: "configuracion.html" }
+];
+
+export function renderNav(actual) {
+  const el = document.getElementById("topbar");
+  if (!el) return;
+  let html = `<div class="brand"><span class="material-icons">gavel</span><span>remateTaller</span></div><nav class="nav-scroll">`;
+  NAV_ITEMS.forEach((p) => {
+    const cls = p.id === actual ? "nav-link activo" : "nav-link";
+    html += `<a href="${p.href}" class="${cls}"><span class="material-icons">${p.icon}</span><span>${p.label}</span></a>`;
+  });
+  html += `<a href="#" class="nav-link" id="btnSalir"><span class="material-icons">logout</span><span>Salir</span></a></nav>`;
+  el.innerHTML = html;
+  document.getElementById("btnSalir").addEventListener("click", (e) => {
+    e.preventDefault();
+    cerrarSesion();
+  });
+}
+
+// =====================================================
+// FOTOS: compresión client-side + subida a Cloudinary
+// (lado mayor 2000px, JPEG 0.85 — patrón Casa Verde)
+// =====================================================
+
+export function comprimirImagen(file, maxLado = 2000, calidad = 0.85) {
+  return new Promise((resolve) => {
+    if (!file || !file.type || !file.type.startsWith("image/")) {
+      resolve(file);
+      return;
+    }
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.naturalWidth, h = img.naturalHeight;
+      const mayor = Math.max(w, h);
+      if (mayor > maxLado) {
+        const f = maxLado / mayor;
+        w = Math.round(w * f);
+        h = Math.round(h * f);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      canvas.toBlob(
+        (blob) => resolve(blob && blob.size < file.size ? blob : file),
+        "image/jpeg",
+        calidad
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(file); // a prueba de fallos: sube el original
+    };
+    img.src = url;
+  });
+}
+
+// maxLado: lado mayor máximo en px (default 2000; el inventario de
+// productos usa 800, como las facturas de gastos de CasaVerde).
+export async function subirFoto(file, carpeta, maxLado = 2000) {
+  const blob = await comprimirImagen(file, maxLado);
+  const fd = new FormData();
+  fd.append("file", blob);
+  fd.append("upload_preset", CLOUDINARY.preset);
+  if (carpeta) fd.append("folder", "remate/" + carpeta);
+  const res = await fetch(
+    "https://api.cloudinary.com/v1_1/" + CLOUDINARY.cloud + "/image/upload",
+    { method: "POST", body: fd }
+  );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    // Cloudinary devuelve la causa en data.error.message
+    // (ej: "Upload preset not found" → falta crear el preset unsigned).
+    const detalle = (data && data.error && data.error.message)
+      ? data.error.message
+      : "HTTP " + res.status;
+    throw new Error("Cloudinary: " + detalle);
+  }
+  return data.secure_url;
+}
+
+// =====================================================
+// VISOR DE FOTOS — pantalla completa, con navegación
+// mostrarFoto(urls, indice): urls puede ser un array o una sola url.
+// =====================================================
+
+const VISOR_CSS = `
+#visorFoto { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.92);
+  z-index:600; align-items:center; justify-content:center; }
+#visorFoto img { max-width:96vw; max-height:88vh; object-fit:contain; border-radius:4px; }
+#visorFoto button { position:absolute; background:rgba(255,255,255,0.18); color:#fff;
+  border:none; border-radius:50%; width:44px; height:44px; font-size:28px;
+  display:flex; align-items:center; justify-content:center; cursor:pointer; }
+#visorCerrar { top:14px; right:14px; }
+#visorPrev { left:8px; top:50%; transform:translateY(-50%); }
+#visorNext { right:8px; top:50%; transform:translateY(-50%); }
+#visorContador { position:absolute; top:26px; left:16px; color:#fff; font-size:14px; }
+`;
+
+let visorUrls = [];
+let visorIdx = 0;
+
+function asegurarVisorFoto() {
+  if (document.getElementById("visorFoto")) return;
+  const st = document.createElement("style");
+  st.textContent = VISOR_CSS;
+  document.head.appendChild(st);
+  const v = document.createElement("div");
+  v.id = "visorFoto";
+  v.innerHTML = `
+    <img id="visorImg" alt="Foto ampliada">
+    <button id="visorCerrar" class="material-icons" aria-label="Cerrar">close</button>
+    <button id="visorPrev" class="material-icons" aria-label="Anterior">chevron_left</button>
+    <button id="visorNext" class="material-icons" aria-label="Siguiente">chevron_right</button>
+    <span id="visorContador"></span>`;
+  document.body.appendChild(v);
+  const cerrar = () => { v.style.display = "none"; };
+  v.addEventListener("click", (e) => { if (e.target === v) cerrar(); });
+  v.querySelector("#visorCerrar").addEventListener("click", cerrar);
+  v.querySelector("#visorPrev").addEventListener("click", (e) => {
+    e.stopPropagation();
+    visorIdx = (visorIdx - 1 + visorUrls.length) % visorUrls.length;
+    visorRender();
+  });
+  v.querySelector("#visorNext").addEventListener("click", (e) => {
+    e.stopPropagation();
+    visorIdx = (visorIdx + 1) % visorUrls.length;
+    visorRender();
+  });
+}
+
+function visorRender() {
+  const v = document.getElementById("visorFoto");
+  v.querySelector("#visorImg").src = visorUrls[visorIdx] || "";
+  const varias = visorUrls.length > 1;
+  v.querySelector("#visorContador").textContent =
+    varias ? (visorIdx + 1) + " / " + visorUrls.length : "";
+  v.querySelector("#visorPrev").style.display = varias ? "flex" : "none";
+  v.querySelector("#visorNext").style.display = varias ? "flex" : "none";
+}
+
+export function mostrarFoto(fotos, indice = 0) {
+  visorUrls = (Array.isArray(fotos) ? fotos : [fotos]).filter(Boolean);
+  if (visorUrls.length === 0) return;
+  visorIdx = Math.min(Math.max(0, indice), visorUrls.length - 1);
+  asegurarVisorFoto();
+  visorRender();
+  document.getElementById("visorFoto").style.display = "flex";
+}
+
+// =====================================================
+// AYUDA CONTEXTUAL — botón "?" junto al título de la página
+// Cada página llama iniciarAyuda(titulo, htmlDeAyuda).
+// =====================================================
+
+const AYUDA_CSS = `
+#modalAyuda { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
+  z-index:500; align-items:flex-end; justify-content:center; }
+#modalAyuda .ayuda-caja { background:var(--c-superficie, #fff); width:100%; max-width:540px;
+  max-height:85vh; overflow-y:auto; border-radius:16px 16px 0 0; padding:14px 18px 28px; }
+#modalAyuda .ayuda-top { display:flex; justify-content:space-between; align-items:center;
+  border-bottom:1px solid var(--c-borde, #ddd); padding-bottom:8px; margin-bottom:4px; }
+#modalAyuda .ayuda-top button { border:none; background:none; padding:4px; font-size:24px; cursor:pointer; }
+#modalAyuda h3 { margin:16px 0 4px; font-size:15px; }
+#modalAyuda p, #modalAyuda li { font-size:14px; line-height:1.5; margin:6px 0; }
+#modalAyuda ul { padding-left:18px; margin:4px 0; }
+.icono-ayuda { font-size:22px; color:var(--c-primario, #1a73e8); vertical-align:middle;
+  margin-left:8px; cursor:pointer; }
+`;
+
+function asegurarModalAyuda() {
+  if (document.getElementById("modalAyuda")) return;
+  const st = document.createElement("style");
+  st.textContent = AYUDA_CSS;
+  document.head.appendChild(st);
+  const m = document.createElement("div");
+  m.id = "modalAyuda";
+  m.innerHTML = `<div class="ayuda-caja">
+    <div class="ayuda-top"><strong id="ayudaTitulo"></strong>
+      <button id="ayudaCerrar" class="material-icons" aria-label="Cerrar">close</button></div>
+    <div id="ayudaCuerpo"></div>
+  </div>`;
+  document.body.appendChild(m);
+  m.addEventListener("click", (e) => { if (e.target === m) m.style.display = "none"; });
+  m.querySelector("#ayudaCerrar").addEventListener("click", () => { m.style.display = "none"; });
+}
+
+export function mostrarAyuda(titulo, html) {
+  asegurarModalAyuda();
+  const m = document.getElementById("modalAyuda");
+  m.querySelector("#ayudaTitulo").textContent = titulo;
+  m.querySelector("#ayudaCuerpo").innerHTML = html;
+  m.style.display = "flex";
+}
+
+/** Agrega el ícono "?" al h1 de la página, que abre la ayuda contextual. */
+export function iniciarAyuda(titulo, html) {
+  const h1 = document.querySelector("main h1");
+  if (!h1 || h1.querySelector(".icono-ayuda")) return;
+  const b = document.createElement("span");
+  b.className = "material-icons icono-ayuda";
+  b.textContent = "help_outline";
+  b.setAttribute("role", "button");
+  b.addEventListener("click", () => mostrarAyuda(titulo, html));
+  h1.appendChild(b);
+}
+
+// =====================================================
+// HELPERS GENERALES
+// =====================================================
+
+export function fmtMoneda(monto, moneda) {
+  const n = Number(monto || 0).toLocaleString("es-UY", { maximumFractionDigits: 2 });
+  return (moneda === "USD" ? "US$ " : "$ ") + n;
+}
+
+export function fmtFecha(f) {
+  const ms = tsAms(f);
+  return ms ? new Date(ms).toLocaleDateString("es-UY") : "—";
+}
+
+/** Código de llave legible: 8 caracteres sin ambiguos (0/O, 1/I/L) */
+export function generarCodigoLlave() {
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let c = "";
+  for (let i = 0; i < 8; i++) c += chars[Math.floor(Math.random() * chars.length)];
+  return c;
+}
+
+/** URL base del sitio público (quita /interno/... si corresponde). */
+export function urlBasePublica() {
+  const href = window.location.href;
+  if (href.indexOf("/interno/") !== -1) return href.split("/interno/")[0];
+  return window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, "");
+}
+
+/** Solo dígitos de un teléfono (para links wa.me). */
+export function soloDigitos(t) {
+  return String(t || "").replace(/\D/g, "");
+}
+
+export function toast(mensaje, tipo = "ok") {
+  let t = document.getElementById("toast");
+  if (!t) {
+    t = document.createElement("div");
+    t.id = "toast";
+    document.body.appendChild(t);
+  }
+  t.textContent = mensaje;
+  t.className = "toast " + tipo + " visible";
+  setTimeout(() => t.classList.remove("visible"), 3500);
+}
