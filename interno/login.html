@@ -23,13 +23,35 @@
       <span class="material-icons">login</span> Entrar
     </button>
 
+    <p class="texto-suave centrado" style="margin-top:14px;">
+      <a href="#" id="linkOlvide" style="color:var(--c-primario); text-decoration:none;">¿Olvidaste tu contraseña?</a>
+    </p>
+
     <p id="msgError" class="texto-suave centrado" style="color:var(--c-error); display:none; margin-top:14px;"></p>
+  </div>
+
+  <!-- ============ Recuperar contraseña ============ -->
+  <div class="login-card" id="cardOlvide" style="display:none; margin-top:16px;">
+    <h2 style="margin-top:0; font-size:18px;">Recuperar contraseña</h2>
+    <p class="texto-suave">Ingresá tu email y te enviamos un link para crear una contraseña nueva.</p>
+
+    <label for="emailRecuperar">Email</label>
+    <input type="email" id="emailRecuperar" autocomplete="username" inputmode="email">
+
+    <button class="btn" id="btnEnviarRecuperar">
+      <span class="material-icons">mail</span> Enviar link
+    </button>
+    <button class="btn secundario" id="btnCancelarRecuperar" style="margin-top:8px;">
+      Cancelar
+    </button>
+
+    <p id="msgRecuperar" class="texto-suave centrado" style="display:none; margin-top:14px;"></p>
   </div>
 </div>
 
 <script type="module">
 import { auth, signInWithEmailAndPassword } from "./utils.js";
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // Si ya hay sesión, ir directo al panel
 onAuthStateChanged(auth, (user) => {
@@ -66,6 +88,52 @@ function mostrarError(t) {
 btn.addEventListener("click", entrar);
 document.getElementById("pass").addEventListener("keydown", (e) => {
   if (e.key === "Enter") entrar();
+});
+
+// ---------- Recuperar contraseña ----------
+const cardOlvide = document.getElementById("cardOlvide");
+const msgRecuperar = document.getElementById("msgRecuperar");
+const btnEnviarRecuperar = document.getElementById("btnEnviarRecuperar");
+
+document.getElementById("linkOlvide").addEventListener("click", (e) => {
+  e.preventDefault();
+  msgRecuperar.style.display = "none";
+  document.getElementById("emailRecuperar").value = document.getElementById("email").value.trim();
+  cardOlvide.style.display = "block";
+  cardOlvide.scrollIntoView({ behavior: "smooth" });
+});
+
+document.getElementById("btnCancelarRecuperar").addEventListener("click", () => {
+  cardOlvide.style.display = "none";
+});
+
+async function enviarRecuperar() {
+  const email = document.getElementById("emailRecuperar").value.trim();
+  if (!email) {
+    mostrarMsgRecuperar("Ingresá tu email.", true);
+    return;
+  }
+  btnEnviarRecuperar.disabled = true;
+  try {
+    await sendPasswordResetEmail(auth, email);
+    mostrarMsgRecuperar("Listo. Revisá tu email (y la carpeta de spam) para crear una contraseña nueva.", false);
+  } catch (e) {
+    console.error(e);
+    // No revelamos si el email existe o no, por seguridad.
+    mostrarMsgRecuperar("Si el email está registrado, vas a recibir un link para crear una contraseña nueva.", false);
+  }
+  btnEnviarRecuperar.disabled = false;
+}
+
+function mostrarMsgRecuperar(t, esError) {
+  msgRecuperar.textContent = t;
+  msgRecuperar.style.color = esError ? "var(--c-error)" : "";
+  msgRecuperar.style.display = "block";
+}
+
+btnEnviarRecuperar.addEventListener("click", enviarRecuperar);
+document.getElementById("emailRecuperar").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") enviarRecuperar();
 });
 </script>
 </body>
