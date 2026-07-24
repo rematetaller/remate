@@ -1,0 +1,18 @@
+{
+  "name": "remateTaller",
+  "short_name": "remateTaller",
+  "description": "Gestión de remates: inventario, ventas, pedidos y accesos de compradores.",
+  "start_url": "index.html",
+  "scope": ".",
+  "id": "remateTaller",
+  "display": "standalone",
+  "background_color": "#f4f4f2",
+  "theme_color": "#b45309",
+  "orientation": "portrait-primary",
+  "lang": "es",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
