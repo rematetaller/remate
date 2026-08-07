@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<!-- remateTaller — martillo de rematador con mango de llave mecánica.
+     Fuente de verdad del icono: los PNG de esta carpeta salen de esta geometría.
+     Colores del design-system: fondo --c-primario #b45309, trazo --c-primario-claro #fef3e2. -->
+<mask id="boca">
+  <rect width="512" height="512" fill="#000"/>
+  <circle cx="148.8" cy="339.2" r="41.2" fill="#fff"/>
+  <circle cx="148.8" cy="339.2" r="21.3" fill="#000"/>
+  <line x1="148.8" y1="339.2" x2="85.8" y2="402.2" stroke="#000" stroke-width="42.5" stroke-linecap="round"/>
+</mask>
+<rect width="512" height="512" rx="113" fill="#b45309"/>
+<g stroke="#fef3e2" stroke-linecap="round">
+  <line x1="114.5" y1="418.0" x2="279.1" y2="418.0" stroke-width="44.6"/>
+  <line x1="251.7" y1="116.3" x2="375.2" y2="239.7" stroke-width="89.2"/>
+  <line x1="169.4" y1="318.6" x2="313.4" y2="178.0" stroke-width="37.7"/>
+</g>
+<circle cx="148.8" cy="339.2" r="41.2" fill="#fef3e2" mask="url(#boca)"/>
+</svg>
