@@ -1,6 +1,6 @@
 # REMATE TALLER — Documentación del sistema
 
-**Edición del 7 de agosto de 2026 · v0.5.3**
+**Edición del 7 de agosto de 2026 · v0.5.4**
 
 Documento único del proyecto: el reglamento técnico, la historia de cada tanda y la
 guía de la parte pública, todo en un archivo. **Reemplaza a
@@ -48,7 +48,7 @@ conversación**. Este vive en el repositorio y en el conocimiento del proyecto.
 
 # LIBRO 1 · CONVENCIONES
 
-### Reglamento técnico único · v1.1 (agosto 2026, tanda 10)
+### Reglamento técnico único · v1.2 (agosto 2026, tanda 11)
 
 > Este documento manda sobre el código. Si algo acá contradice a una implementación,
 > **la implementación está mal**. Si una decisión nueva contradice a este documento,
@@ -129,6 +129,7 @@ terceros, que irán en variables de entorno de Netlify.
 ```
 /index.html                  → LA PUERTA PÚBLICA: valida la llave, o avisa por WhatsApp
 /comprador.html              → el catálogo y el carrito del comprador (entra con llave)
+/firestore.rules             → copia de las reglas publicadas en la consola
 /interno/                    → el panel de los dos administradores
    utils.js                  → el núcleo. Firebase, auth, nav, llaves, fotos, ayuda, helpers
    design-system.css         → estilos comunes, mobile-first
@@ -311,12 +312,16 @@ ventas/venta-ped-{codigo}
 
 ### Notas de cada colección
 
-**`usuarios/{uid}`** — `utils.js` tiene el mapa **`ADMINS_INICIALES`**: en el primer
-login, el usuario listado ahí se auto-crea su documento. **Ningún otro `uid` se
-auto-provisiona.** Para sumar una persona: crearla en Auth desde la consola y **o**
-agregarla al mapa (implica tocar `utils.js`) **o** crearle el documento a mano. Desde
-`configuracion.html` se edita el nombre y se activa/desactiva — y **nadie puede
-desactivarse a sí mismo**.
+**`usuarios/{uid}`** — el id del documento **es el `uid` de Auth**. Para sumar una
+persona: crearla en Auth desde la consola de Firebase, copiar su UID y darle de alta la
+ficha desde **"Agregar usuario"** en `configuracion.html` (email + nombre + UID; queda con
+`rol: 'admin'` y `activo: true`). Las contraseñas no se comparten nunca: la persona entra
+por **"Recuperar contraseña"** en `login.html`, que manda el mail de Firebase. Desde
+`configuracion.html` se edita el nombre y se activa/desactiva, y **nadie puede
+desactivarse a sí mismo** — desde la v0.4 eso lo impide la regla, no la pantalla.
+`utils.js` todavía tiene el mapa **`ADMINS_INICIALES`** con la autoprovisión del primer
+login, que **la v0.4 dejó sin efecto a propósito** (§5.7). El campo `rol` se escribe
+siempre como `'admin'` y hasta la v0.4 nadie lo leía; ahora lo lee la regla.
 
 - Florencia — florenciadetp@gmail.com — `6HnSCkjKGEWKv39f37HJRpLEToV2`
 - Mauro — masotromauro@gmail.com — `R9b8YLM66mdrY8FTC8gEjBNaOr92`
@@ -356,8 +361,9 @@ Tres círculos, de afuera hacia adentro:
 2. **Escritura con llave vigente, validada en el servidor:** solo `pedidos`, y solo
    mientras el pedido esté `abierto` o `enviado`. Un comprador **no puede escribir sobre
    un pedido ya validado**: eso lo garantiza la regla, no la interfaz.
-3. **Todo lo demás, solo autenticados.** `usuarios`, `ventas`, `metodosPago`, `llaves`
-   (listar), borrados.
+3. **Todo lo demás, solo usuarios activos.** `usuarios`, `ventas`, `metodosPago`,
+   `llaves` (listar), borrados. **Autenticado no alcanza**: la regla exige que exista la
+   ficha en `usuarios/{uid}` y que `activo == true` (§5.6).
 
 **Nunca se puede listar `llaves` sin sesión.** El `get` por código está abierto porque el
 código *es* la credencial; poder listarlas sería entregar todas las credenciales.
@@ -367,73 +373,47 @@ Reemplazar el archivo por unos pocos bloques **deniega todo lo demás**. Se pega
 el archivo entero.
 
 ### 5.3 · Una colección nueva entra con su regla, en la misma tanda
-El catch-all de abajo cubre las colecciones nuevas para usuarios autenticados, así que
-una colección sin regla propia **no falla al crearse**: falla más tarde, cuando alguien
-sin sesión la necesita. Si la colección necesita lectura pública, su bloque se escribe en
-la misma entrega que el código que la usa.
+**Desde la v0.4 no hay catch-all: rige el default deny.** Una colección sin bloque propio
+queda inaccesible desde el cliente y falla a la vista, en la primera prueba. Antes era peor:
+el catch-all la dejaba abierta a cualquiera con sesión y el problema aparecía mucho después.
+El bloque se escribe en la misma entrega que el código que usa la colección.
 
-### 5.4 · Reglas vigentes (v0.3) — pegar completas en la consola
+### 5.4 · Reglas vigentes (v0.4) — pegar completas en la consola
 
-> ⚠ **Verificación pendiente.** Se detectó que en la consola seguían publicadas las
-> **v0.2** (solo autenticados) mientras el registro decía v0.3. Con las v0.2, el
-> comprador **no ve el catálogo ni puede guardar su pedido**. Ver §11.1.
+> Las **v0.3 quedaron verificadas**: estaban publicadas de verdad (§11.1 cerrada). La v0.4
+> se apoya en eso y cierra dos cosas que la v0.3 dejaba abiertas.
 
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
+El archivo completo vive en `firestore.rules`, en la raíz del repositorio, y es la copia de
+lo que hay que pegar en la consola. Lo que cambia respecto de la v0.3:
 
-    function llaveValida(c) {
-      let l = get(/databases/$(database)/documents/llaves/$(c)).data;
-      return l.revocada == false && l.venceEn > request.time;
-    }
+1. **Se eliminó el catch-all `match /{col}/{docId}`.** Rige el default deny (§5.3).
+   Consecuencia inmediata: `metodosPago` necesitó su bloque propio, porque vivía del
+   catch-all sin que nadie lo hubiera notado.
+2. **`usuarios` dejó de ser escribible por cualquier autenticado.** Era el agujero grande:
+   con el rol viviendo en ese documento, cualquiera con sesión podía editarse el suyo y
+   ponerse `rol: 'admin'`. Ahora escribir usuarios es solo de admin, y **nadie puede
+   desactivarse a sí mismo ni cambiarse el rol** — eso pasó de ser un cuidado de la
+   interfaz a ser una regla.
+3. **Toda escritura de administración exige usuario activo**, no solo autenticado.
 
-    // Llaves: lectura puntual pública (get) por código; nunca listar sin auth.
-    match /llaves/{codigo} {
-      allow get: if true;
-      allow list, write: if request.auth != null;
-    }
+### 5.6 · Autenticado no es lo mismo que habilitado
+La v0.3 autorizaba con `request.auth != null` y nada más. Eso significaba que desactivar a
+alguien le cortaba el panel pero **no los datos**: con su credencial viva podía leer y
+escribir Firestore por fuera de la interfaz. Las funciones `activo()` y `esAdmin()` leen la
+ficha de `usuarios/{uid}` y exigen `activo == true`. Cada `get()` en una regla cuesta una
+lectura facturada y hay un tope de 10 accesos por evaluación: a este volumen es
+irrelevante, y el día que exista una función de servidor conviene mover el rol a **custom
+claims**, que viajan en el token y no cuestan lecturas (a cambio de tardar hasta una hora
+en propagarse).
 
-    // Config pública (textos + WhatsApp de contacto)
-    match /config/publico {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    // Catálogo: lectura pública (el filtrado por llave es en la interfaz;
-    // decisión v0.3: los datos no son sensibles y simplifica el sistema).
-    match /categorias/{id} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-    match /productos/{id} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    // Pedidos: el comprador crea/edita SOLO con llave vigente y nunca
-    // después de validado. La regla valida la llave server-side.
-    match /pedidos/{id} {
-      allow get: if true;
-      allow list, delete: if request.auth != null;
-      allow create: if request.auth != null ||
-        (llaveValida(request.resource.data.llaveCodigo)
-          && (request.resource.data.estado == 'abierto'
-              || request.resource.data.estado == 'enviado'));
-      allow update: if request.auth != null ||
-        (llaveValida(request.resource.data.llaveCodigo)
-          && (resource.data.estado == 'abierto' || resource.data.estado == 'enviado')
-          && (request.resource.data.estado == 'abierto'
-              || request.resource.data.estado == 'enviado'));
-    }
-
-    // Todo lo demás (usuarios, ventas, metodosPago, etc.): solo autenticados.
-    match /{col}/{docId} {
-      allow read, write: if request.auth != null;
-    }
-  }
-}
-```
+### 5.7 · La autoprovisión de administradores ya no funciona, y está bien
+`verificarAuth` en `utils.js` crea el documento de usuario en el primer login si el `uid`
+está en `ADMINS_INICIALES`. **Esa escritura ahora la deniega la regla**, y tiene que ser
+así: si el cliente pudiera crear su propia ficha, el agujero del punto 2 volvería por la
+ventana. Los dos administradores actuales ya tienen su documento, así que no se rompe nada
+hoy — pero el camino para sumar una persona es el que ya existe en `configuracion.html`:
+crearla en Auth desde la consola y darle de alta la ficha con su UID desde el panel. Queda
+pendiente limpiar ese bloque muerto de `utils.js` (§12.13).
 
 ### 5.5 · Cuando lleguen las integraciones, salen del catch-all
 Hoy `config/` tiene un solo documento, `publico`, con su bloque propio. **El día que
@@ -451,6 +431,7 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | Archivo | v | Qué es |
 |---|---|---|
 | `index.html` | 1.0 | Puerta pública: valida la llave (por link o a mano) y avisa por WhatsApp si no sirve |
+| `firestore.rules` | 0.4 | Copia de las reglas de la consola: default deny, `usuarios` cerrado, chequeo de `activo` |
 | `comprador.html` | 2.3 | Catálogo (nombre + descripción, fotos ampliables), guía "¿Cómo comprar?", carrito, lote, propuesta, envío |
 | `interno/utils.js` | 1.5 | Núcleo: Firebase, auth + autoprovisión, nav, `validarLlave`, `subirFoto` (con `maxLado` y error real de Cloudinary), ayuda `iniciarAyuda`/`mostrarAyuda`, visor `mostrarFoto`, helpers |
 | `interno/design-system.css` | 1.0 | Estilos mobile-first |
@@ -568,6 +549,12 @@ núcleo y no de una página.
   pago y entrega, pero **descuenta el stock**: revalidar un pedido cuyos ítems se editaron
   entre medio no reconcilia el stock ya descontado. Si hay que corregir cantidades después
   de validar, se corrige el stock a mano en inventario.
+- **Autenticado no es habilitado** (§5.6), y **el documento que guarda el permiso hay que
+  protegerlo antes que nada**: si el rol vive en `usuarios/{uid}` y ese documento es
+  escribible por su dueño, el esquema de roles no existe.
+- **Al sacar el catch-all aparecen las colecciones que vivían de él.** `metodosPago` era
+  una: nunca tuvo bloque propio. La prueba de que las reglas nuevas están bien no es que el
+  panel abra, es que **cada colección se siga usando**.
 - **Un `catch` que se traga un error de permisos es un error invisible.** Si algo "no
   carga" y la consola está limpia, sospechar de un `catch` silencioso antes que de la
   lógica.
@@ -815,9 +802,13 @@ artículo).
 Esta sección no es una lista de deseos: es lo que **hay que abrir y mirar** antes de dar
 el sistema por andando.
 
-1. ⚠ **Reglas de Firestore v0.3.** Se detectó que seguían publicadas las v0.2. Pegar
-   completas las de §5.4 en la consola. **Sin esto el comprador no ve el catálogo ni puede
-   guardar su pedido**, y el panel sigue funcionando perfecto, así que no se nota.
+1. ✅ **Reglas de Firestore v0.3 — verificadas.** Estaban publicadas de verdad; el
+   administrador las leyó de la consola y coinciden con lo que el registro decía. Se cierra
+   el pendiente más viejo del proyecto.
+   ⚠ **Ahora hay que publicar las v0.4** (§5.4): pegar `firestore.rules` completo. Después
+   de pegarlas, probar en este orden: abrir el panel (si la ficha de usuario no se lee, no
+   entra nadie), **agregar un método de pago en Ventas** —es la colección que vivía del
+   catch-all—, cargar un producto, y abrir el catálogo con una llave en otro navegador.
 2. ✅ **Preset de Cloudinary `preset-remate`** (unsigned) — creado y verificado, la carga
    de fotos funciona.
 3. **Prueba de circuito completo v0.5**, en este orden: crear un producto con nombre +
@@ -878,7 +869,21 @@ el sistema por andando.
    el sistema no va a calcular con ella.
 11. **Botón "Reabrir"** en pedidos descartados (devolverlos a `enviado`), si retomar
    negociaciones sin generar llave nueva se vuelve frecuente.
-12. **Ayuda en el `index.html` público**, si hiciera falta: hoy los tres textos editables de
+12. **Roles: admin y operador.** El `rol` ya lo lee la regla (`esAdmin()`), pero todos los
+   usuarios se crean como `admin`. Falta decidir **qué no puede hacer un operador** y
+   escribirlo en las reglas y en el panel. Siendo dos personas de confianza no da ventaja
+   operativa: entra como experimento y por reuso, y conviene llamarlo por su nombre.
+13. **Limpiar la autoprovisión muerta de `utils.js`** (§5.7): el bloque que crea la ficha en
+   el primer login ya no puede escribir. Hoy no rompe nada —los dos ya tienen documento—
+   pero deja un camino que termina en un `catch` y una vuelta a `login.html` sin explicar
+   por qué. Reemplazarlo por un mensaje claro: "tu cuenta no está habilitada".
+14. **`compradores/{telefono}`** — una ficha por persona, con el teléfono normalizado como
+   id, y las llaves apuntando ahí. Hoy la historia de un comprador que compró tres veces
+   está partida en tres llaves. **Descartado en el camino:** darle al comprador una cuenta
+   de Auth con la llave como contraseña. No tienen mail, la cuenta sobrevive a la llave que
+   vence, y cada comprador autenticado entraría por la misma puerta que los
+   administradores. La llave ya es la credencial y la regla ya la valida en el servidor.
+15. **Ayuda en el `index.html` público**, si hiciera falta: hoy los tres textos editables de
    `config/publico` cubren los casos de llave inválida (Libro 3).
 
 ---
@@ -895,6 +900,47 @@ el sistema por andando.
 > (`v0.5.1` → `v0.5.2`). Las correcciones dentro de una misma tanda llevan sufijo.
 
 ---
+
+## v0.5.4 — Reglas v0.4: autenticado deja de ser suficiente (Tanda 11 · 7-ago-2026)
+
+> **Entrega:** `firestore.rules` (nuevo archivo en la raíz) + esta edición del documento.
+> **Acción manual: pegar las reglas completas en la consola.** Sin eso, esta tanda no
+> existe.
+>
+> **Se cerró la verificación más vieja del proyecto.** Las v0.3 estaban publicadas de
+> verdad. El registro decía la verdad; lo que faltaba era mirar. Queda como lección al
+> revés: el problema no era la regla, era que nadie había abierto la consola en dos meses.
+>
+> **Y al mirarlas apareció algo peor que lo que se buscaba.** Las v0.3 autorizaban con
+> `request.auth != null` y nada más. Dos consecuencias que no estaban escritas en ningún
+> lado: desactivar a un usuario le cortaba el panel pero **no los datos**, y `usuarios`
+> era escribible por cualquiera con sesión, así que el rol —que estaba por convertirse en
+> el eje de los permisos— vivía en un documento que su propio dueño podía editar. Es el
+> error clásico del esquema de roles en documentos, y estaba a una tanda de distancia de
+> importar de verdad.
+>
+> **Qué hace la v0.4:** saca el catch-all y pasa a **default deny** (§5.3), cierra
+> `usuarios` a los admin con la prohibición de auto-desactivarse y auto-promoverse escrita
+> en la regla, y exige **usuario activo** —no solo autenticado— en toda escritura de
+> administración (§5.6).
+>
+> **Efecto colateral buscado:** al sacar el catch-all, `metodosPago` quedó sin regla y hubo
+> que escribirle la suya. Vivía de la barredora desde la tanda 6 sin que nadie lo supiera.
+> Es el argumento entero a favor del default deny.
+>
+> **Y uno no buscado, que queda anotado:** la autoprovisión de `utils.js` deja de poder
+> escribir (§5.7). Es correcto que no pueda —si el cliente crea su propia ficha, el agujero
+> vuelve—, no rompe nada hoy porque los dos administradores ya tienen documento, y el
+> camino de alta que ya existe en `configuracion.html` es el bueno. Limpiar ese bloque
+> muerto queda como §12.13.
+>
+> **Decisión de arquitectura, para no repetirla:** el rol se queda en el documento por
+> ahora. Las **custom claims** son gratis en las reglas y son lo recomendado cuando el rol
+> casi no cambia, pero necesitan Admin SDK, o sea servidor. El día que exista la función de
+> Netlify de las notificaciones, ese es el momento de mudarlo.
+>
+> **También quedó descartado por escrito** darle cuenta de Auth al comprador (§12.14): la
+> llave ya es la credencial y la regla ya la valida en el servidor.
 
 ## v0.5.3 — El icono, y la capa PWA sale de la sombra (Tanda 10 · 7-ago-2026)
 
