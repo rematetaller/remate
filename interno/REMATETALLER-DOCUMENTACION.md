@@ -1,6 +1,6 @@
 # REMATE TALLER — Documentación del sistema
 
-**Edición del 7 de agosto de 2026 · v0.5.4**
+**Edición del 7 de agosto de 2026 · v0.5.5**
 
 Documento único del proyecto: el reglamento técnico, la historia de cada tanda y la
 guía de la parte pública, todo en un archivo. **Reemplaza a
@@ -48,7 +48,7 @@ conversación**. Este vive en el repositorio y en el conocimiento del proyecto.
 
 # LIBRO 1 · CONVENCIONES
 
-### Reglamento técnico único · v1.2 (agosto 2026, tanda 11)
+### Reglamento técnico único · v1.3 (agosto 2026, tanda 12)
 
 > Este documento manda sobre el código. Si algo acá contradice a una implementación,
 > **la implementación está mal**. Si una decisión nueva contradice a este documento,
@@ -248,6 +248,23 @@ Antes de dar un archivo por entregado se valida que el JS parsea. Un error de si
 un módulo ES no rompe una función: **deja la página en blanco**, sin nada visible que
 explique por qué.
 
+### 3.19 · La salida vive en la hoja de cuenta, no en la navegación
+El avatar de la topbar abre la hoja de cuenta: quién sos, **Cerrar sesión** y **Reparar la
+app**. No se pone "Salir" como ítem de la barra de navegación: la barra scrollea horizontal
+y en un teléfono entran cinco ítems, así que el último es un botón invisible — que es
+exactamente lo que pasó hasta la tanda 12. Y `cerrarSesion` **limpia la caché local**
+(`terminate` + `clearIndexedDbPersistence`): la caché de Firestore es una por navegador, y
+sin limpiarla la próxima persona que entre en ese teléfono abre el panel con los datos de
+la anterior. El `Promise.race` de 3 segundos existe para que un IndexedDB trancado no deje
+a nadie encerrado adentro.
+
+### 3.20 · Reparar la app no toca el servidor
+`repararApp()` borra service workers, todas las cachés y las bases locales de Firebase.
+Nada más. Existe porque dentro de una PWA instalada no hay consola ni forma cómoda de
+borrar los datos del sitio, y el síntoma —una pantalla que sirve una mezcla vieja— no se
+distingue de un bug. El texto de confirmación dice explícitamente que no se pierde ningún
+dato: sin eso, nadie se anima a tocarlo.
+
 ### 3.17 · La PWA es del panel, no del sitio público
 `manifest.webmanifest` y `sw.js` viven en `interno/` y los registran **solo** las páginas
 de ahí, con ruta relativa: el alcance del service worker queda en `/interno/` y **nunca
@@ -407,13 +424,14 @@ claims**, que viajan en el token y no cuestan lecturas (a cambio de tardar hasta
 en propagarse).
 
 ### 5.7 · La autoprovisión de administradores ya no funciona, y está bien
-`verificarAuth` en `utils.js` crea el documento de usuario en el primer login si el `uid`
-está en `ADMINS_INICIALES`. **Esa escritura ahora la deniega la regla**, y tiene que ser
+Hasta la v1.5, `verificarAuth` creaba el documento de usuario en el primer login si el
+`uid` estaba en `ADMINS_INICIALES`. **Esa escritura la deniega la regla**, y tiene que ser
 así: si el cliente pudiera crear su propia ficha, el agujero del punto 2 volvería por la
 ventana. Los dos administradores actuales ya tienen su documento, así que no se rompe nada
 hoy — pero el camino para sumar una persona es el que ya existe en `configuracion.html`:
-crearla en Auth desde la consola y darle de alta la ficha con su UID desde el panel. Queda
-pendiente limpiar ese bloque muerto de `utils.js` (§12.13).
+crearla en Auth desde la consola y darle de alta la ficha con su UID desde el panel. **La
+v1.6 retiró el bloque** y lo reemplazó por un cartel que explica la situación y muestra el
+UID para copiarlo.
 
 ### 5.5 · Cuando lleguen las integraciones, salen del catch-all
 Hoy `config/` tiene un solo documento, `publico`, con su bloque propio. **El día que
@@ -433,7 +451,7 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | `index.html` | 1.0 | Puerta pública: valida la llave (por link o a mano) y avisa por WhatsApp si no sirve |
 | `firestore.rules` | 0.4 | Copia de las reglas de la consola: default deny, `usuarios` cerrado, chequeo de `activo` |
 | `comprador.html` | 2.3 | Catálogo (nombre + descripción, fotos ampliables), guía "¿Cómo comprar?", carrito, lote, propuesta, envío |
-| `interno/utils.js` | 1.5 | Núcleo: Firebase, auth + autoprovisión, nav, `validarLlave`, `subirFoto` (con `maxLado` y error real de Cloudinary), ayuda `iniciarAyuda`/`mostrarAyuda`, visor `mostrarFoto`, helpers |
+| `interno/utils.js` | 1.6 | Núcleo: Firebase, auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, helpers |
 | `interno/design-system.css` | 1.0 | Estilos mobile-first |
 | `interno/login.html` | 1.0 | Login admin |
 | `interno/index.html` | 1.0 | Router/portero del panel |
@@ -873,10 +891,8 @@ el sistema por andando.
    usuarios se crean como `admin`. Falta decidir **qué no puede hacer un operador** y
    escribirlo en las reglas y en el panel. Siendo dos personas de confianza no da ventaja
    operativa: entra como experimento y por reuso, y conviene llamarlo por su nombre.
-13. **Limpiar la autoprovisión muerta de `utils.js`** (§5.7): el bloque que crea la ficha en
-   el primer login ya no puede escribir. Hoy no rompe nada —los dos ya tienen documento—
-   pero deja un camino que termina en un `catch` y una vuelta a `login.html` sin explicar
-   por qué. Reemplazarlo por un mensaje claro: "tu cuenta no está habilitada".
+13. ✅ **Autoprovisión de `utils.js` retirada** (tanda 12). En su lugar, un cartel que dice
+   qué pasó y muestra el UID para que un administrador dé de alta la ficha.
 14. **`compradores/{telefono}`** — una ficha por persona, con el teléfono normalizado como
    id, y las llaves apuntando ahí. Hoy la historia de un comprador que compró tres veces
    está partida en tres llaves. **Descartado en el camino:** darle al comprador una cuenta
@@ -900,6 +916,41 @@ el sistema por andando.
 > (`v0.5.1` → `v0.5.2`). Las correcciones dentro de una misma tanda llevan sufijo.
 
 ---
+
+## v0.5.5 — Salir del panel de verdad (Tanda 12 · 7-ago-2026)
+
+> **Entrega:** `interno/utils.js` v1.6 + esta edición. Sin cambios de reglas ni de datos.
+>
+> **El síntoma era "no hay cómo cerrar sesión".** El diagnóstico fue otro: **sí había**,
+> era el último ítem de la barra de navegación, y la barra scrollea horizontal. En un
+> teléfono entran cinco ítems, así que "Salir" estaba fuera de pantalla desde la tanda 1.
+> Un botón que existe pero no se ve no es un botón. De acá sale la regla §3.19.
+>
+> **Qué reemplaza a eso:** el avatar con las iniciales en la topbar abre una hoja de cuenta
+> con el nombre, el mail, **Cerrar sesión** y **Reparar la app**. Patrón tomado de Casa
+> Verde, donde nació por el mismo motivo.
+>
+> **Y lo que importa más que el botón:** `cerrarSesion` ahora **limpia la caché local**.
+> La caché de Firestore es una por navegador; un `signOut` pelado deja los datos adentro y
+> la próxima persona que entre en ese teléfono los hereda. El caso de uso que lo pidió es
+> justo ese: salir para probar como comprador, o prestarle el teléfono a alguien.
+>
+> **"Reparar la app"** borra service workers, cachés y bases locales, sin tocar el
+> servidor (§3.20). remateTaller es PWA instalable desde la tanda anterior: dentro de la
+> app instalada no hay consola para borrar los datos del sitio.
+>
+> **Se cerró §12.13:** la autoprovisión muerta salió de `utils.js`. Ahora, si alguien entra
+> con una cuenta de Auth sin ficha habilitada, ve un cartel que lo dice **y muestra su
+> UID** para que un administrador lo dé de alta — antes rebotaba a `login.html` sin
+> explicación, que se parece a una contraseña mal puesta.
+>
+> **Sumado al núcleo:** `escapar()` (había HTML armado a mano sin escapar) y `usuario()`,
+> que devuelve la ficha en memoria y va a ser la base de los permisos de la tanda que viene.
+>
+> **Lo que esta tanda NO toca**, y está decidido en conversación pero sin escribir código:
+> los permisos (`inventario` / `cobros` / `entregas` / `llaves` / `validar`, §12.12), el
+> ciclo del precio con la bandeja de pendientes de tasar, y la digitalización de las
+> libretas de propiedad con su búsqueda por aproximación. Las tres esperan turno.
 
 ## v0.5.4 — Reglas v0.4: autenticado deja de ser suficiente (Tanda 11 · 7-ago-2026)
 

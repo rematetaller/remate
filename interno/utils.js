@@ -1,7 +1,25 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.5)
+// utils.js — Núcleo compartido de remateTaller (v1.6)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
+//
+// v1.6 (tanda 12):
+//  · HOJA DE CUENTA detrás del avatar de la topbar: quién sos,
+//    "Cerrar sesión" y "Reparar la app". Antes "Salir" era el último
+//    ítem de la barra de navegación, que scrollea horizontal: en un
+//    teléfono quedaba fuera de pantalla, o sea invisible.
+//  · cerrarSesion() ahora LIMPIA la caché local (terminate +
+//    clearIndexedDbPersistence). La caché de Firestore es una por
+//    navegador: sin esto, quien entra después en ese teléfono hereda
+//    los datos del anterior.
+//  · repararApp(): borra service workers, cachés y bases locales.
+//    Sin tocar nada del servidor. Dentro de una PWA instalada no hay
+//    consola para hacerlo a mano.
+//  · Se retiró la autoprovisión de administradores: las reglas v0.4
+//    la deniegan a propósito (si el cliente puede crear su propia
+//    ficha en `usuarios`, se puede poner rol de admin solo). Ahora,
+//    en lugar de rebotar a login.html sin explicación, se muestra un
+//    mensaje que dice qué pasó.
 // =====================================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -11,7 +29,8 @@ import {
 import {
   getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
   collection, getDocs, query, where, orderBy, limit,
-  serverTimestamp, onSnapshot, getCountFromServer
+  serverTimestamp, onSnapshot, getCountFromServer,
+  terminate, clearIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ---------- Configuración Firebase (pública por diseño) ----------
@@ -43,58 +62,139 @@ export const CLOUDINARY = {
   preset: "preset-remate" // unsigned preset — crearlo en Cloudinary si no existe
 };
 
-// ---------- Administradores iniciales ----------
-// En el primer login se les crea automáticamente su doc en `usuarios`.
-// Solo estos uid se auto-provisionan; cualquier otro queda afuera.
-const ADMINS_INICIALES = {
-  "6HnSCkjKGEWKv39f37HJRpLEToV2": "Florencia",
-  "R9b8YLM66mdrY8FTC8gEjBNaOr92": "Mauro"
-};
-
 // =====================================================
 // AUTENTICACIÓN Y CONTROL DE ACCESO (admins)
 // =====================================================
 
+// Quién está usando el panel. Lo llena verificarAuth y lo leen la
+// navegación y la hoja de cuenta. Las páginas lo piden con usuario().
+let _usuario = null;
+
+/** { uid, email, nombre, rol, activo } o null si no hay sesión verificada. */
+export function usuario() { return _usuario; }
+
 /**
  * Verifica sesión + usuario activo en Firestore.
- * Auto-crea el doc de usuario si el uid está en ADMINS_INICIALES.
- * Sin sesión o inactivo → login.html.
+ * Sin sesión → login.html.
+ * Con sesión pero sin ficha activa → cartel explicando por qué (antes
+ * rebotaba a login.html en silencio y parecía un error de contraseña).
  * callback(user, datosUsuario)
  */
 export function verificarAuth(callback) {
   onAuthStateChanged(auth, async (user) => {
     if (!user) { window.location.href = "login.html"; return; }
     try {
-      const ref = doc(db, "usuarios", user.uid);
-      let snap = await getDoc(ref);
+      const snap = await getDoc(doc(db, "usuarios", user.uid));
 
-      if (!snap.exists() && ADMINS_INICIALES[user.uid]) {
-        await setDoc(ref, {
-          nombre: ADMINS_INICIALES[user.uid],
-          email: user.email || "",
-          rol: "admin",
-          activo: true,
-          creadoEn: serverTimestamp()
-        });
-        snap = await getDoc(ref);
-      }
-
-      if (!snap.exists() || snap.data().activo === false) {
-        await signOut(auth);
-        window.location.href = "login.html";
+      if (!snap.exists()) {
+        mostrarSinAcceso(
+          "Tu cuenta existe, pero todavía no está habilitada en el sistema.",
+          "Pedile a un administrador que te dé de alta desde Configuración " +
+          "con este identificador:",
+          user.uid
+        );
         return;
       }
+      if (snap.data().activo === false) {
+        mostrarSinAcceso(
+          "Tu cuenta está desactivada.",
+          "Un administrador puede reactivarla desde Configuración.",
+          ""
+        );
+        return;
+      }
+
+      _usuario = Object.assign(
+        { uid: user.uid, email: user.email || "" },
+        snap.data()
+      );
       callback(user, snap.data());
     } catch (e) {
       console.error("Error verificando usuario:", e);
-      window.location.href = "login.html";
+      mostrarSinAcceso(
+        "No pudimos verificar tu cuenta.",
+        "Puede ser un problema de conexión, o de permisos en la base. " +
+        "El detalle está en la consola del navegador.",
+        (e && e.code) ? e.code : ""
+      );
     }
   });
 }
 
-export async function cerrarSesion() {
-  await signOut(auth);
-  window.location.href = "login.html";
+/** Pantalla completa que explica por qué no se puede entrar. */
+function mostrarSinAcceso(titulo, detalle, dato) {
+  asegurarEstilosCuenta();
+  const d = document.createElement("div");
+  d.className = "rt-bloqueo";
+  d.innerHTML =
+    '<div class="rt-bloqueo-caja">' +
+      '<span class="material-icons rt-bloqueo-ico">lock_person</span>' +
+      "<h2>" + escapar(titulo) + "</h2>" +
+      "<p>" + escapar(detalle) + "</p>" +
+      (dato ? '<code class="rt-dato">' + escapar(dato) + "</code>" : "") +
+      '<button class="rt-btn-salir" id="rtVolverLogin">Volver a entrar</button>' +
+    "</div>";
+  document.body.appendChild(d);
+  document.getElementById("rtVolverLogin")
+    .addEventListener("click", () => cerrarSesion(false));
+}
+
+/**
+ * Cierra sesión y BORRA la caché local de Firestore.
+ * La caché es una por navegador: si no se limpia, la próxima persona que
+ * entre en este teléfono abre el panel con los datos de la anterior.
+ * El Promise.race es para que un IndexedDB trancado no deje a nadie
+ * encerrado adentro: a los 3 segundos se sale igual.
+ */
+export async function cerrarSesion(confirmar = true) {
+  if (confirmar && !window.confirm("¿Cerrar sesión en este dispositivo?")) return;
+  try { await signOut(auth); } catch (e) { console.warn("signOut:", e); }
+  try {
+    await Promise.race([
+      (async () => { await terminate(db); await clearIndexedDbPersistence(db); })(),
+      new Promise((r) => setTimeout(r, 3000))
+    ]);
+  } catch (e) { console.warn("limpieza de caché local:", e); }
+  window.location.replace("login.html");
+}
+
+/**
+ * SALIDA DE EMERGENCIA — "Reparar la app".
+ * El panel se instala como PWA en el teléfono, y ahí no hay consola ni
+ * forma cómoda de borrar los datos del sitio. Cuando algo del lado del
+ * navegador queda trancado (un service worker viejo sirviendo mezcla,
+ * una base local a medio cerrar, una sesión que rebota), esto hace la
+ * limpieza desde un botón.
+ * Borra: service workers, todas las cachés y las bases locales de
+ * Firebase. NO toca el servidor: ni un producto, ni una venta, ni un
+ * usuario.
+ */
+export async function repararApp() {
+  if (!window.confirm(
+    "Reparar borra lo que la app guardó en ESTE teléfono (cachés y sesión) " +
+    "y te va a pedir entrar de nuevo.\n\n" +
+    "No se toca nada del servidor: ni datos, ni fotos, ni usuarios.\n\n¿Seguimos?"
+  )) return;
+  try { await signOut(auth); } catch (e) { console.warn("signOut:", e); }
+  try {
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+  } catch (e) { console.warn("service workers:", e); }
+  try {
+    if (window.caches) {
+      const claves = await caches.keys();
+      await Promise.all(claves.map((k) => caches.delete(k)));
+    }
+  } catch (e) { console.warn("cachés:", e); }
+  try {
+    await Promise.race([
+      (async () => { await terminate(db); await clearIndexedDbPersistence(db); })(),
+      new Promise((r) => setTimeout(r, 3000))
+    ]);
+  } catch (e) { console.warn("bases locales:", e); }
+  window.location.replace("login.html");
 }
 
 // =====================================================
@@ -157,17 +257,111 @@ const NAV_ITEMS = [
 export function renderNav(actual) {
   const el = document.getElementById("topbar");
   if (!el) return;
-  let html = `<div class="brand"><span class="material-icons">gavel</span><span>remateTaller</span></div><nav class="nav-scroll">`;
+  const nombre = (_usuario && _usuario.nombre) || "";
+  let html =
+    '<div class="rt-topfila">' +
+      '<div class="brand"><span class="material-icons">gavel</span><span>remateTaller</span></div>' +
+      '<button class="rt-avatar" id="rtBtnCuenta" aria-label="Mi cuenta" title="' +
+        escapar(nombre) + '">' + escapar(inicialesDe(nombre)) + "</button>" +
+    "</div>" +
+    '<nav class="nav-scroll">';
   NAV_ITEMS.forEach((p) => {
     const cls = p.id === actual ? "nav-link activo" : "nav-link";
-    html += `<a href="${p.href}" class="${cls}"><span class="material-icons">${p.icon}</span><span>${p.label}</span></a>`;
+    html += '<a href="' + p.href + '" class="' + cls + '"><span class="material-icons">' +
+      p.icon + "</span><span>" + p.label + "</span></a>";
   });
-  html += `<a href="#" class="nav-link" id="btnSalir"><span class="material-icons">logout</span><span>Salir</span></a></nav>`;
+  html += "</nav>";
   el.innerHTML = html;
-  document.getElementById("btnSalir").addEventListener("click", (e) => {
-    e.preventDefault();
-    cerrarSesion();
-  });
+  // "Salir" ya no vive acá: vivía al final de una barra que scrollea, o sea
+  // fuera de pantalla en un teléfono. Ahora está en la hoja de cuenta.
+  document.getElementById("rtBtnCuenta")
+    .addEventListener("click", mostrarCuenta);
+}
+
+/** Iniciales para el avatar: "Florencia" → "F", "Ana María" → "AM". */
+function inicialesDe(nombre) {
+  const partes = String(nombre || "").trim().split(/\s+/).filter(Boolean);
+  if (!partes.length) return "?";
+  return (partes[0][0] + (partes[1] ? partes[1][0] : "")).toUpperCase();
+}
+
+// =====================================================
+// HOJA DE CUENTA — quién sos, salir, reparar
+// =====================================================
+
+const CSS_CUENTA = `
+.rt-topfila { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.rt-avatar { flex:0 0 auto; width:36px; height:36px; border-radius:50%; border:none;
+  background:var(--c-primario, #b45309); color:var(--c-primario-claro, #fef3e2);
+  font-size:14px; font-weight:600; letter-spacing:.5px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; }
+#rtCuenta { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
+  z-index:550; align-items:flex-end; justify-content:center; }
+#rtCuenta .rt-caja { background:var(--c-superficie, #fff); width:100%; max-width:540px;
+  border-radius:16px 16px 0 0; padding:14px 18px 26px; }
+#rtCuenta .rt-quien { display:flex; align-items:center; gap:12px; margin-bottom:6px; }
+#rtCuenta .rt-quien .rt-avatar { width:44px; height:44px; font-size:17px; cursor:default; }
+#rtCuenta .rt-nombre { font-weight:600; }
+#rtCuenta .rt-mail { font-size:13px; color:var(--c-texto-suave, #666);
+  word-break:break-all; }
+#rtCuenta button.rt-fila { display:flex; align-items:center; gap:10px; width:100%;
+  border:none; background:none; padding:14px 4px; font-size:15px; cursor:pointer;
+  text-align:left; border-top:1px solid var(--c-borde, #ddd); color:inherit; }
+#rtCuenta .rt-nota { font-size:12px; color:var(--c-texto-suave, #666); margin:2px 0 0 34px; }
+.rt-bloqueo { position:fixed; inset:0; background:var(--c-fondo, #f4f4f2); z-index:700;
+  display:flex; align-items:center; justify-content:center; padding:24px; }
+.rt-bloqueo-caja { max-width:420px; text-align:center; }
+.rt-bloqueo-ico { font-size:44px; color:var(--c-primario, #b45309); }
+.rt-bloqueo h2 { font-size:18px; margin:10px 0 6px; }
+.rt-bloqueo p { font-size:14px; line-height:1.5; color:var(--c-texto-suave, #666); }
+.rt-dato { display:block; margin:10px 0; font-size:12px; word-break:break-all;
+  background:var(--c-superficie, #fff); padding:8px; border-radius:8px; }
+.rt-btn-salir { margin-top:14px; border:none; border-radius:10px; padding:11px 18px;
+  background:var(--c-primario, #b45309); color:#fff; font-size:15px; cursor:pointer; }
+`;
+
+function asegurarEstilosCuenta() {
+  if (document.getElementById("rtCssCuenta")) return;
+  const st = document.createElement("style");
+  st.id = "rtCssCuenta";
+  st.textContent = CSS_CUENTA;
+  document.head.appendChild(st);
+}
+
+function asegurarHojaCuenta() {
+  asegurarEstilosCuenta();
+  if (document.getElementById("rtCuenta")) return;
+  const m = document.createElement("div");
+  m.id = "rtCuenta";
+  m.innerHTML =
+    '<div class="rt-caja">' +
+      '<div class="rt-quien">' +
+        '<span class="rt-avatar" id="rtCuentaIni"></span>' +
+        '<div><div class="rt-nombre" id="rtCuentaNombre"></div>' +
+        '<div class="rt-mail" id="rtCuentaMail"></div></div>' +
+      "</div>" +
+      '<button class="rt-fila" id="rtFilaReparar">' +
+        '<span class="material-icons">healing</span>Reparar la app</button>' +
+      '<div class="rt-nota">Borra cachés y sesión de este teléfono. No toca los datos.</div>' +
+      '<button class="rt-fila" id="rtFilaSalir">' +
+        '<span class="material-icons">logout</span>Cerrar sesión</button>' +
+    "</div>";
+  document.body.appendChild(m);
+  m.addEventListener("click", (e) => { if (e.target === m) m.style.display = "none"; });
+  document.getElementById("rtFilaSalir")
+    .addEventListener("click", () => cerrarSesion(true));
+  document.getElementById("rtFilaReparar")
+    .addEventListener("click", repararApp);
+}
+
+export function mostrarCuenta() {
+  asegurarHojaCuenta();
+  const nombre = (_usuario && _usuario.nombre) || "";
+  document.getElementById("rtCuentaIni").textContent = inicialesDe(nombre);
+  document.getElementById("rtCuentaNombre").textContent = nombre || "Sin nombre";
+  document.getElementById("rtCuentaMail").textContent =
+    (_usuario && _usuario.email) || "";
+  document.getElementById("rtCuenta").style.display = "flex";
 }
 
 // =====================================================
@@ -372,6 +566,13 @@ export function fmtMoneda(monto, moneda) {
 export function fmtFecha(f) {
   const ms = tsAms(f);
   return ms ? new Date(ms).toLocaleDateString("es-UY") : "—";
+}
+
+/** Escapa texto para meterlo en innerHTML sin romper nada. */
+export function escapar(t) {
+  return String(t == null ? "" : t)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 /** Código de llave legible: 8 caracteres sin ambiguos (0/O, 1/I/L) */
