@@ -11,6 +11,20 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+/* Chips de permisos. Van acá y no en design-system.css porque son de
+   esta pantalla; los globales del núcleo los inyecta utils.js (§7.7). */
+.permisos { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 4px; }
+.permiso-chip { display:flex; align-items:center; gap:6px; border:1px solid var(--c-borde,#ddd);
+  border-radius:20px; padding:7px 13px; font-size:14px; cursor:pointer; background:none; }
+.permiso-chip.on { background:var(--c-primario,#b45309); color:#fff; border-color:transparent; }
+.permiso-chip .material-icons { font-size:17px; }
+.permiso-det { font-size:12px; color:var(--c-texto-suave,#666); margin:2px 0 10px; }
+.presets { display:flex; gap:8px; margin:6px 0 2px; flex-wrap:wrap; }
+.clave-caja { background:var(--c-fondo,#f4f4f2); border-radius:10px; padding:12px; margin-top:10px; }
+.clave-caja code { font-size:16px; letter-spacing:1px; word-break:break-all; }
+.tabs-modo { display:flex; gap:8px; margin-bottom:10px; }
+</style>
 </head>
 <body>
 
@@ -53,18 +67,23 @@
     <span class="material-icons">save</span> Guardar configuración
   </button>
 
-  <!-- ============ Usuarios administradores ============ -->
-  <h2>Usuarios administradores</h2>
+  <!-- ============ Usuarios ============ -->
+  <h2>Usuarios del panel</h2>
 
-  <div class="card">
-    <h2 style="margin-top:0;">Agregar usuario</h2>
-    <p class="texto-suave">
-      Primero hay que crearlo en la consola de Firebase (Authentication → Agregar usuario).
-      Una vez creado, pegá acá su <strong>UID</strong> para darle su ficha y acceso al panel.
-    </p>
+  <details class="card" id="cardAlta">
+    <summary><strong>Agregar usuario</strong></summary>
 
-    <label for="inpNuevoUid">UID (de Firebase Authentication)</label>
-    <input type="text" id="inpNuevoUid" autocomplete="off" placeholder="Ej: 6HnSCkjKGEWKv39f37HJRpLEToV2">
+    <div class="tabs-modo">
+      <button class="btn secundario" id="btnModoNueva">Cuenta nueva</button>
+      <button class="btn secundario" id="btnModoUid">Ya existe en Firebase</button>
+    </div>
+
+    <p class="texto-suave" id="textoModo"></p>
+
+    <div id="campoUid" style="display:none;">
+      <label for="inpNuevoUid">UID (Firebase → Authentication)</label>
+      <input type="text" id="inpNuevoUid" autocomplete="off" placeholder="Ej: 6HnSCkjKGEWKv39f37HJRpLEToV2">
+    </div>
 
     <label for="inpNuevoEmail">Email</label>
     <input type="email" id="inpNuevoEmail" autocomplete="off" inputmode="email">
@@ -72,19 +91,40 @@
     <label for="inpNuevoNombre">Nombre visible</label>
     <input type="text" id="inpNuevoNombre" autocomplete="off" placeholder="Aparece en ventas: quién vendió, cobró o entregó">
 
+    <label>Qué puede hacer</label>
+    <div class="presets" id="presetsAlta"></div>
+    <div class="permisos" id="permisosAlta"></div>
+    <div id="detallesAlta"></div>
+
+    <label class="fila" style="gap:8px; align-items:center; margin-top:10px;">
+      <input type="checkbox" id="chkAdminAlta" style="width:auto;">
+      <span>Administrador (además maneja usuarios, textos públicos y borrados)</span>
+    </label>
+
     <button class="btn" id="btnAgregarUsuario">
       <span class="material-icons">person_add</span> Agregar usuario
     </button>
-  </div>
+
+    <div class="clave-caja" id="cajaClave" style="display:none;">
+      <strong>Cuenta creada.</strong>
+      <p class="texto-suave" style="margin:6px 0;">
+        No hace falta pasarle esta contraseña: decile que entre a la pantalla de login y
+        toque <strong>“Olvidé mi contraseña”</strong> con su email. Le llega un mail para
+        poner la suya.
+      </p>
+      <code id="claveGenerada"></code>
+    </div>
+  </details>
 
   <div id="listaUsuarios"><p class="texto-suave">Cargando…</p></div>
 </main>
 
 <script type="module">
 import {
-  verificarAuth, renderNav, db, toast, iniciarAyuda,
+  verificarAuth, renderNav, db, toast, iniciarAyuda, escapar,
   doc, getDoc, setDoc, updateDoc, collection, getDocs,
-  serverTimestamp, soloDigitos, fmtFecha
+  serverTimestamp, soloDigitos, fmtFecha,
+  PERMISOS, PRESETS, esAdmin, exigirPermiso, crearCuentaAuth, generarClave
 } from "./utils.js";
 
 iniciarAyuda("Qué se configura acá", `
@@ -93,19 +133,34 @@ iniciarAyuda("Qué se configura acá", `
 <li><strong>WhatsApp de contacto:</strong> a ese número llegan los compradores cuando su llave venció, fue revocada o no tienen una. Mantenelo actualizado: es la vía de rescate de cualquier acceso caído.</li>
 <li><strong>Textos:</strong> son los mensajes que ve el comprador en cada situación (bienvenida, llave vencida, sin llave) y el mensaje precargado al compartir una llave por WhatsApp. Los cambios rigen al instante.</li>
 </ul>
-<h3>Usuarios administradores</h3>
+<h3>Usuarios y permisos</h3>
+<p>Cada persona tiene <strong>permisos tildados</strong>, no un cargo. Los dos armados típicos están como botones:</p>
 <ul>
-<li>Acá se edita el nombre visible (aparece en ventas: quién vendió, cobró o entregó) y se <strong>activa/desactiva</strong> cada usuario. Desactivado no puede entrar al panel.</li>
-<li>Nadie puede desactivarse a sí mismo, para no dejar el sistema sin administradores.</li>
-<li>Los usuarios nuevos se crean primero en la consola de Firebase (Authentication); después, con su UID, se les crea la ficha acá mismo, en "Agregar usuario". Las contraseñas no se comparten nunca.</li>
+<li><strong>Ayudante:</strong> inventario, cobros y entregas. Ordena el depósito, carga artículos con foto, cobra y entrega — pero <strong>no toca precios</strong> ni habla de plata con el comprador.</li>
+<li><strong>Gestión:</strong> todo lo anterior más llaves y precios. Es el trato con el cliente y el acuerdo económico.</li>
+<li><strong>Administrador</strong> no es un permiso más: además de poder todo, es el único que maneja usuarios, textos públicos y borrados.</li>
+</ul>
+<h3>Cómo se suma alguien</h3>
+<ul>
+<li><strong>Cuenta nueva:</strong> con email y nombre alcanza. El sistema crea la cuenta y la persona pone su contraseña desde “Olvidé mi contraseña”. <strong>Las contraseñas no se comparten nunca.</strong></li>
+<li><strong>Ya existe en Firebase:</strong> para alguien que ya tiene cuenta creada a mano en la consola. Se pega su UID.</li>
+</ul>
+<h3>Cómo se saca</h3>
+<ul>
+<li><strong>Desactivar, nunca borrar.</strong> Los pagos y las entregas guardan quién los registró: si se borra la ficha, el historial queda hablando de un fantasma. Desactivado pierde el acceso al instante y el registro sigue siendo legible.</li>
+<li>Nadie puede desactivarse a sí mismo ni sacarse permisos, para no dejar el sistema sin administradores.</li>
 </ul>
 `);
 
 let uidActual = null;
+let modoAlta = "nueva";
+const permisosAlta = {};
 
 verificarAuth(async (user) => {
   uidActual = user.uid;
   renderNav("configuracion");
+  if (!exigirPermiso("admin")) return;
+  pintarAlta();
   await cargar();
   await cargarUsuarios();
 });
@@ -153,69 +208,151 @@ document.getElementById("btnGuardar").addEventListener("click", async () => {
   btn.disabled = false;
 });
 
-// ---------- Agregar usuario ----------
+// ---------- Alta de usuarios ----------
+function pintarAlta() {
+  document.getElementById("presetsAlta").innerHTML = PRESETS.map((p) =>
+    `<button class="btn secundario btnPreset" data-preset="${p.id}">${escapar(p.label)}</button>`
+  ).join("");
+  document.getElementById("permisosAlta").innerHTML = PERMISOS.map((p) =>
+    `<button class="permiso-chip" data-permiso="${p.id}">
+       <span class="material-icons">${p.icono}</span>${escapar(p.label)}</button>`
+  ).join("");
+  document.getElementById("detallesAlta").innerHTML = PERMISOS.map((p) =>
+    `<div class="permiso-det"><strong>${escapar(p.label)}:</strong> ${escapar(p.detalle)}</div>`
+  ).join("");
+
+  document.querySelectorAll("#permisosAlta .permiso-chip").forEach((b) => {
+    b.addEventListener("click", () => {
+      const id = b.dataset.permiso;
+      permisosAlta[id] = !permisosAlta[id];
+      b.classList.toggle("on", !!permisosAlta[id]);
+    });
+  });
+  document.querySelectorAll(".btnPreset").forEach((b) => {
+    b.addEventListener("click", () => {
+      const pr = PRESETS.find((x) => x.id === b.dataset.preset);
+      PERMISOS.forEach((p) => { permisosAlta[p.id] = pr.permisos.includes(p.id); });
+      document.querySelectorAll("#permisosAlta .permiso-chip").forEach((c) => {
+        c.classList.toggle("on", !!permisosAlta[c.dataset.permiso]);
+      });
+    });
+  });
+  setModo("nueva");
+}
+
+function setModo(m) {
+  modoAlta = m;
+  document.getElementById("campoUid").style.display = m === "uid" ? "" : "none";
+  document.getElementById("btnModoNueva").classList.toggle("secundario", m !== "nueva");
+  document.getElementById("btnModoUid").classList.toggle("secundario", m !== "uid");
+  document.getElementById("textoModo").textContent = m === "nueva"
+    ? "Se crea la cuenta y la ficha de una vez. La persona pone su contraseña desde “Olvidé mi contraseña”."
+    : "Para alguien que ya tiene cuenta creada en la consola de Firebase. Copiá su UID de Authentication.";
+}
+document.getElementById("btnModoNueva").addEventListener("click", () => setModo("nueva"));
+document.getElementById("btnModoUid").addEventListener("click", () => setModo("uid"));
+
 document.getElementById("btnAgregarUsuario").addEventListener("click", async () => {
-  const uid = document.getElementById("inpNuevoUid").value.trim();
   const email = document.getElementById("inpNuevoEmail").value.trim();
   const nombre = document.getElementById("inpNuevoNombre").value.trim();
+  const uidPegado = document.getElementById("inpNuevoUid").value.trim();
 
-  if (!uid) { toast("Pegá el UID del usuario (lo copiás de Firebase Authentication).", "error"); return; }
   if (!email) { toast("Cargá el email.", "error"); return; }
   if (!nombre) { toast("Cargá el nombre visible.", "error"); return; }
+  if (modoAlta === "uid" && !uidPegado) {
+    toast("Pegá el UID, o cambiá a “Cuenta nueva”.", "error"); return;
+  }
+  const admin = document.getElementById("chkAdminAlta").checked;
+  const algunPermiso = PERMISOS.some((p) => permisosAlta[p.id]);
+  if (!admin && !algunPermiso) {
+    toast("Elegí al menos un permiso, o marcalo como administrador.", "error"); return;
+  }
 
   const btn = document.getElementById("btnAgregarUsuario");
   btn.disabled = true;
+  let clave = null;
   try {
+    let uid = uidPegado;
+
+    if (modoAlta === "nueva") {
+      clave = generarClave();
+      // Instancia secundaria: crear la cuenta no debe tirarnos de la nuestra.
+      uid = await crearCuentaAuth(email, clave);
+    }
+
     const ref = doc(db, "usuarios", uid);
-    const existente = await getDoc(ref);
-    if (existente.exists()) {
-      toast("Ese UID ya tiene una ficha creada.", "error");
+    if ((await getDoc(ref)).exists()) {
+      toast("Ese usuario ya tiene ficha creada.", "error");
       btn.disabled = false;
       return;
     }
+
+    const permisos = {};
+    PERMISOS.forEach((p) => { permisos[p.id] = !!permisosAlta[p.id]; });
+
     await setDoc(ref, {
-      email, nombre, rol: "admin", activo: true,
+      email, nombre,
+      rol: admin ? "admin" : "operador",
+      permisos, activo: true,
       creadoEn: serverTimestamp(), creadoPor: uidActual
     });
-    toast("Usuario agregado. Ya puede ingresar con su email y contraseña.", "ok");
+
+    if (clave) {
+      document.getElementById("claveGenerada").textContent = clave;
+      document.getElementById("cajaClave").style.display = "";
+    }
+    toast("Usuario agregado.", "ok");
     document.getElementById("inpNuevoUid").value = "";
     document.getElementById("inpNuevoEmail").value = "";
     document.getElementById("inpNuevoNombre").value = "";
     await cargarUsuarios();
   } catch (e) {
     console.error(e);
-    toast("No se pudo agregar el usuario.", "error");
+    // El error de Auth dice la causa real (email repetido, contraseña
+    // corta, registro deshabilitado). Mostrarlo, no el código (§3.10).
+    toast("No se pudo agregar: " + (e.code || e.message || "error"), "error");
   }
   btn.disabled = false;
 });
 
-// ---------- Usuarios ----------
+// ---------- Lista de usuarios ----------
 async function cargarUsuarios() {
   const cont = document.getElementById("listaUsuarios");
   try {
     const snap = await getDocs(collection(db, "usuarios"));
     if (snap.empty) {
-      cont.innerHTML = '<p class="texto-suave">Sin usuarios registrados aún (se crean en el primer login).</p>';
+      cont.innerHTML = '<p class="texto-suave">Sin usuarios registrados.</p>';
       return;
     }
     let html = "";
     snap.forEach((d) => {
       const u = d.data();
       const esYo = d.id === uidActual;
+      const admin = u.rol === "admin";
       const badge = u.activo === false
         ? '<span class="badge error">Inactivo</span>'
         : '<span class="badge ok">Activo</span>';
+      const chips = PERMISOS.map((p) => {
+        const on = admin || (u.permisos && u.permisos[p.id]);
+        return `<button class="permiso-chip ${on ? "on" : ""} chipUsr"
+          data-uid="${d.id}" data-permiso="${p.id}" ${admin ? "disabled" : ""}>
+          <span class="material-icons">${p.icono}</span>${escapar(p.label)}</button>`;
+      }).join("");
+
       html += `<div class="card">
         <div class="fila" style="justify-content:space-between;">
-          <strong>${u.nombre || "—"}${esYo ? " (vos)" : ""}</strong> ${badge}
+          <strong>${escapar(u.nombre || "—")}${esYo ? " (vos)" : ""}</strong> ${badge}
         </div>
-        <p class="texto-suave" style="margin:6px 0;">${u.email || "—"} · rol: ${u.rol || "admin"} ·
-        desde ${fmtFecha(u.creadoEn)}</p>
+        <p class="texto-suave" style="margin:6px 0;">${escapar(u.email || "—")} ·
+        ${admin ? "administrador" : "permisos a medida"} · desde ${fmtFecha(u.creadoEn)}</p>
         <label for="nom-${d.id}">Nombre</label>
-        <input type="text" id="nom-${d.id}" value="${u.nombre || ""}">
+        <input type="text" id="nom-${d.id}" value="${escapar(u.nombre || "")}">
+        <label>Permisos</label>
+        ${admin ? '<p class="permiso-det">Es administrador: puede todo, y además maneja usuarios, textos públicos y borrados.</p>' : ""}
+        <div class="permisos">${chips}</div>
         <div class="fila">
           <button class="btn secundario btnGuardarUsr" data-uid="${d.id}">
-            <span class="material-icons">save</span> Guardar</button>
+            <span class="material-icons">save</span> Guardar nombre</button>
           ${esYo ? "" : `<button class="btn ${u.activo === false ? "" : "peligro"} btnToggleUsr"
             data-uid="${d.id}" data-activo="${u.activo === false ? "0" : "1"}">
             <span class="material-icons">${u.activo === false ? "person_add" : "person_off"}</span>
@@ -224,6 +361,21 @@ async function cargarUsuarios() {
       </div>`;
     });
     cont.innerHTML = html;
+
+    cont.querySelectorAll(".chipUsr").forEach((b) => {
+      b.addEventListener("click", async () => {
+        const on = !b.classList.contains("on");
+        try {
+          await updateDoc(doc(db, "usuarios", b.dataset.uid),
+            { ["permisos." + b.dataset.permiso]: on });
+          b.classList.toggle("on", on);
+          toast(on ? "Permiso habilitado." : "Permiso quitado.", "ok");
+        } catch (e) {
+          console.error(e);
+          toast("No se pudo cambiar el permiso.", "error");
+        }
+      });
+    });
 
     cont.querySelectorAll(".btnGuardarUsr").forEach((b) => {
       b.addEventListener("click", async () => {
@@ -238,7 +390,10 @@ async function cargarUsuarios() {
     cont.querySelectorAll(".btnToggleUsr").forEach((b) => {
       b.addEventListener("click", async () => {
         const activar = b.dataset.activo === "0";
-        if (!activar && !confirm("¿Desactivar este usuario? Perderá el acceso al panel.")) return;
+        if (!activar && !confirm(
+          "¿Desactivar este usuario?\n\nPierde el acceso al instante. " +
+          "Su nombre sigue apareciendo en los cobros y entregas que registró."
+        )) return;
         await updateDoc(doc(db, "usuarios", b.dataset.uid), { activo: activar });
         toast(activar ? "Usuario reactivado." : "Usuario desactivado.", "ok");
         cargarUsuarios();
