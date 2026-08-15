@@ -1,7 +1,13 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.10)
+// utils.js — Núcleo compartido de remateTaller (v1.11)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
+//
+// v1.11 (tanda 19):
+//  · La tolerancia de la búsqueda difusa ahora ESCALA CON EL LARGO. Era
+//    2 fija: en un chasis de 17 caracteres eso es un match muy bueno, en
+//    un padrón de 4 significa que la mitad del número es distinta. Con
+//    eso, buscar "1423" devolvía el padrón "1.622" como coincidencia.
 //
 // v1.10 (tanda 17):
 //  · `esSinDato()`: reconoce los "X", "S/N", "-" con que las libretas
@@ -788,15 +794,31 @@ export function distancia(a, b, tope = 2) {
  *   'cola'     — el buscado está contenido, desde 3 caracteres (leer los
  *                últimos dígitos de una chapa sucia, o las tres letras de
  *                una matrícula, son los casos más comunes de todos)
- *   'cerca'    — a uno o dos caracteres de distancia
+ *   'cerca'    — a uno o dos caracteres de distancia, y SOLO si el número
+ *                es largo: la tolerancia escala con el largo (ver
+ *                `toleranciaPara`). Un identificador corto no admite
+ *                difuso, porque cualquier otro corto le queda cerca.
  *
  * IMPORTANTE: esto PROPONE. Que la libreta corresponda a esa moto lo
  * afirma una persona, y queda registrado con nombre y fecha.
  */
+/**
+ * Cuántos caracteres de diferencia se admiten, según el largo del número.
+ * Un chasis (17) aguanta 2; una matrícula o un padrón (4-6) no aguanta
+ * ninguno — y está bien: para esos alcanza la coincidencia exacta, la de
+ * confusión de caracteres y la parcial.
+ */
+function toleranciaPara(largo) {
+  if (largo < 7) return 0;
+  if (largo < 12) return 1;
+  return 2;
+}
+
 export function buscarIdentificador(texto, candidatos, minParcial = 3) {
   const q = canonizar(texto);
   if (q.length < 3) return [];
   const qp = plegar(texto);
+  const tope = toleranciaPara(qp.length);
   const orden = { exacta: 0, confusion: 1, cola: 2, cerca: 3 };
   const salida = [];
 
@@ -809,7 +831,8 @@ export function buscarIdentificador(texto, candidatos, minParcial = 3) {
     if (canon === q) tipo = "exacta";
     else if (pleg === qp) tipo = "confusion";
     else if (q.length >= minParcial && (pleg.includes(qp) || qp.includes(pleg))) tipo = "cola";
-    else if (distancia(qp, pleg, 2) <= 2) tipo = "cerca";
+    else if (tope > 0 && Math.abs(qp.length - pleg.length) <= tope
+             && distancia(qp, pleg, tope) <= tope) tipo = "cerca";
     if (tipo) salida.push(Object.assign({}, c, { tipo, canon }));
   });
 
