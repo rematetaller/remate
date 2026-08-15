@@ -3,6 +3,12 @@
 Se pega en el chat de Gemini junto con **una o varias fotos** de libretas. Devuelve un
 array JSON, un objeto por libreta, listo para la carga masiva.
 
+**Calibrado el 7-ago-2026** contra una libreta real de Montevideo: la extracción salió
+exacta, incluidos motor y chasis. Dos ajustes que salieron de esa prueba: `emisor` es el
+departamento en mayúsculas (así lo devolvió el modelo, y es mejor que la frase larga que
+yo había puesto), y con **una sola** foto devuelve el objeto suelto en lugar del array —
+no se pelea desde el prompt, lo tolera la pantalla de carga.
+
 Guardar este archivo en el repositorio: el prompt es parte del sistema aunque no sea
 código. Si cambia el esquema, cambia acá.
 
@@ -13,7 +19,7 @@ código. Si cambia el esquema, cambia acá.
 ```
 Sos un transcriptor de documentos. Te paso fotos de libretas de propiedad de vehículos
 de Uruguay. Devolvé UN array JSON, un objeto por foto, en el mismo orden en que te las
-mandé. Nada más: sin explicaciones, sin texto antes ni después, sin ``` alrededor.
+mandé. Array SIEMPRE, incluso si te mando una sola foto. Nada más: sin explicaciones, sin texto antes ni después, sin ``` alrededor.
 
 REGLAS QUE NO SE NEGOCIAN:
 
@@ -32,7 +38,7 @@ REGLAS QUE NO SE NEGOCIAN:
 Esquema de cada objeto:
 
 {
-  "emisor": "intendencia o departamento que emitió, si se puede ver; si no, null",
+  "emisor": "SOLO el departamento, en mayúsculas, ej MONTEVIDEO o CANELONES; null si no se ve",
   "matricula": "tal como aparece, con espacio si lo tiene",
   "padron": null,
   "codigoNacional": null,
@@ -77,7 +83,7 @@ Sale de la libreta de muestra (Montevideo, triciclo Chetak Cargo 2012):
 
 ```json
 [{
-  "emisor": "Intendencia de Montevideo",
+  "emisor": "MONTEVIDEO",
   "matricula": "SNS 805",
   "padron": "903797817",
   "codigoNacional": "903797817",
@@ -119,7 +125,8 @@ Sale de la libreta de muestra (Montevideo, triciclo Chetak Cargo 2012):
    muchas, se confunde el orden y se hace imposible saber qué objeto es qué papel.
 3. Copiar el JSON.
 4. Pegarlo en la pantalla de carga de `documentos.html` (pendiente de construir), que va
-   a mostrar cada registro para confirmar antes de guardar, con la foto al lado.
+   a mostrar cada registro para confirmar antes de guardar, con la foto al lado. Acepta un
+   array o un objeto suelto.
 
 ## Lo que el sistema hace después, y por qué
 
@@ -127,7 +134,9 @@ Sale de la libreta de muestra (Montevideo, triciclo Chetak Cargo 2012):
   evidencia; sacarle los espacios al guardar es perder fidelidad con el documento. La
   canonización (mayúsculas, sin espacios ni guiones) se hace en memoria al buscar.
 - **Los campos marcados en `dudas` se resaltan** en la pantalla de confirmación. Es la
-  única razón por la que ese array existe.
+  única razón por la que ese array existe. ⚠ **Sin verificar:** en la prueba del 7-ago
+  vino vacío con una lectura correcta, que es indistinguible de un modelo que nunca lo
+  llena. Hay que probarlo con una foto con reflejo sobre el chasis antes de confiar en él.
 - **Cada carga guarda la foto** en Cloudinary y queda pegada al registro. Un número sin
   su foto no se puede auditar después.
 - **Nada de esto va a `productos`**, que es de lectura pública. Los titulares y los

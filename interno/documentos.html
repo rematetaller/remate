@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Documentos — remateTaller</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+<link rel="stylesheet" href="design-system.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#b45309">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+.tabs { display:flex; gap:8px; margin-bottom:12px; }
+.tabs .btn { flex:1; }
+.ident { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:15px;
+  letter-spacing:.5px; word-break:break-all; }
+.ident b { background:#fde68a; border-radius:3px; }
+.grupos { display:inline-flex; gap:6px; flex-wrap:wrap; }
+.grupos span { background:var(--c-fondo,#f4f4f2); border-radius:4px; padding:1px 5px; }
+.tipo-exacta { background:#16a34a; }
+.tipo-confusion { background:#ca8a04; }
+.tipo-cola { background:#0284c7; }
+.tipo-cerca { background:#9333ea; }
+.badge.tipo-exacta, .badge.tipo-confusion, .badge.tipo-cola, .badge.tipo-cerca { color:#fff; }
+.duda { border-left:3px solid #ca8a04; padding-left:8px; }
+.mini { width:64px; height:64px; object-fit:cover; border-radius:8px; cursor:pointer; }
+.fila-fotos { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
+.campo-doble { display:grid; grid-template-columns:1fr 1fr; gap:0 10px; }
+.dato { font-size:13px; color:var(--c-texto-suave,#666); margin:2px 0; }
+.dato strong { color:inherit; }
+</style>
+</head>
+<body>
+
+<header id="topbar"></header>
+
+<main>
+  <h1>Documentos</h1>
+
+  <div class="tabs">
+    <button class="btn" id="tabBuscar">
+      <span class="material-icons">search</span> Buscar</button>
+    <button class="btn secundario" id="tabCargar">
+      <span class="material-icons">add_a_photo</span> Cargar</button>
+  </div>
+
+  <!-- ============ BUSCAR ============ -->
+  <section id="vistaBuscar">
+    <div class="card">
+      <label for="inpBuscar">Número de motor, chasis, matrícula o padrón</label>
+      <input type="text" id="inpBuscar" autocomplete="off" inputmode="latin"
+             placeholder="Ej: 0810010 — con los últimos dígitos alcanza">
+      <p class="texto-suave" style="margin:6px 0 0;">
+        No hace falta el número entero ni que esté perfecto: busca por aproximación,
+        aguanta confundir O con 0 e I con 1, y encuentra por los últimos dígitos.
+      </p>
+    </div>
+    <div id="resultados"></div>
+  </section>
+
+  <!-- ============ CARGAR ============ -->
+  <section id="vistaCargar" style="display:none;">
+
+    <details class="card">
+      <summary><strong>Pegar lo que devolvió Gemini</strong></summary>
+      <p class="texto-suave">
+        Sacá la foto de la libreta, pasala por Gemini con el prompt de
+        <code>prompt-libretas.md</code> y pegá acá el JSON. Se revisa registro por
+        registro antes de guardar. Acepta un objeto solo o una lista.
+      </p>
+      <textarea id="txtJson" rows="6" placeholder='[{ "matricula": "SNS 805", ... }]'></textarea>
+      <button class="btn" id="btnLeerJson">
+        <span class="material-icons">playlist_add_check</span> Revisar</button>
+    </details>
+
+    <div class="fila" style="margin:10px 0;">
+      <button class="btn secundario" id="btnVacio">
+        <span class="material-icons">edit_note</span> Cargar a mano</button>
+    </div>
+
+    <div id="pendientes"></div>
+  </section>
+</main>
+
+<script type="module">
+import {
+  verificarAuth, renderNav, db, toast, iniciarAyuda, escapar,
+  doc, setDoc, collection, getDocs, serverTimestamp,
+  subirFoto, mostrarFoto, fmtFecha, usuario, exigirPermiso,
+  canonizar, buscarIdentificador
+} from "./utils.js";
+
+iniciarAyuda("Documentación de vehículos", `
+<h3>Para qué es</h3>
+<p>Digitalizar las libretas de propiedad y cualquier documento con número de
+<strong>motor</strong>, <strong>chasis</strong> o <strong>matrícula</strong>. Después,
+cuando aparece una moto en el depósito, se busca acá si hay documentación registrada
+para ella.</p>
+
+<h3>Buscar</h3>
+<ul>
+<li>Un solo campo busca en <strong>todos</strong> los números a la vez: cuando tenés un
+número en la mano no siempre sabés si es de motor, de chasis o la matrícula. El resultado
+dice en qué campo coincidió.</li>
+<li>Los resultados vienen ordenados por fuerza:
+<strong>Exacta</strong> · <strong>Confusión</strong> (mismo número plegando O/0, I/1, S/5,
+B/8) · <strong>Contiene</strong> (los últimos dígitos, el caso más común con una chapa
+sucia) · <strong>Cerca</strong> (a uno o dos caracteres).</li>
+<li><strong>La búsqueda propone, no afirma.</strong> Que la libreta sea de esa moto lo
+decidís vos mirando la foto del documento.</li>
+</ul>
+
+<h3>Cargar</h3>
+<ul>
+<li><strong>Con Gemini:</strong> foto → prompt → pegar el JSON acá. Cada registro se
+revisa y se confirma antes de guardar. Los campos que el modelo marcó como dudosos
+aparecen resaltados: <strong>miralos contra la foto</strong>.</li>
+<li><strong>A mano:</strong> para un documento que no sea una libreta, o cuando la foto
+no se puede leer.</li>
+<li><strong>Sacá la foto siempre</strong>, incluso cargando a mano. Un número sin su foto
+no se puede auditar después.</li>
+<li>Si el chasis ya está cargado, el sistema avisa antes de guardar: fotografiar dos
+veces la misma libreta es el error más común de una carga larga.</li>
+</ul>
+
+<h3>Qué NO hace</h3>
+<ul>
+<li>No vincula la libreta con un artículo del inventario. Eso viene después, y también lo
+va a firmar una persona.</li>
+<li>No es público: estos datos <strong>no</strong> se muestran en el catálogo del
+comprador. Ahí solo va a decir "con documentación".</li>
+</ul>
+`);
+
+const CAMPOS_ID = [
+  { via: "vehiculo.nroChasis", campo: "Chasis" },
+  { via: "vehiculo.nroMotor",  campo: "Motor" },
+  { via: "matricula",          campo: "Matrícula" },
+  { via: "padron",             campo: "Padrón" },
+  { via: "codigoNacional",     campo: "Código Nacional" }
+];
+
+let docs = [];
+let pendientes = [];
+
+verificarAuth(async () => {
+  renderNav("documentos");
+  if (!exigirPermiso("documentos")) return;
+  await cargarDocs();
+});
+
+function valorEn(obj, via) {
+  return via.split(".").reduce((o, k) => (o == null ? null : o[k]), obj);
+}
+
+async function cargarDocs() {
+  try {
+    const snap = await getDocs(collection(db, "documentos"));
+    docs = [];
+    snap.forEach((d) => docs.push(Object.assign({ id: d.id }, d.data())));
+  } catch (e) {
+    console.error(e);
+    toast("No se pudieron leer los documentos: " + (e.code || e.message), "error");
+  }
+}
+
+// ---------- Pestañas ----------
+function verTab(cual) {
+  document.getElementById("vistaBuscar").style.display = cual === "b" ? "" : "none";
+  document.getElementById("vistaCargar").style.display = cual === "c" ? "" : "none";
+  document.getElementById("tabBuscar").classList.toggle("secundario", cual !== "b");
+  document.getElementById("tabCargar").classList.toggle("secundario", cual !== "c");
+}
+document.getElementById("tabBuscar").addEventListener("click", () => verTab("b"));
+document.getElementById("tabCargar").addEventListener("click", () => verTab("c"));
+
+// ---------- Buscar ----------
+let timer = null;
+document.getElementById("inpBuscar").addEventListener("input", () => {
+  clearTimeout(timer);
+  timer = setTimeout(buscar, 220);
+});
+
+function buscar() {
+  const q = document.getElementById("inpBuscar").value.trim();
+  const cont = document.getElementById("resultados");
+  if (canonizar(q).length < 3) { cont.innerHTML = ""; return; }
+
+  const candidatos = [];
+  docs.forEach((d) => {
+    CAMPOS_ID.forEach((c) => {
+      const v = valorEn(d, c.via);
+      if (v) candidatos.push({ valor: v, campo: c.campo, ref: d });
+    });
+  });
+
+  const hits = buscarIdentificador(q, candidatos);
+  if (!hits.length) {
+    cont.innerHTML = '<div class="card"><p class="texto-suave">' +
+      'Sin coincidencias. Probá con menos dígitos: los últimos seis suelen alcanzar.' +
+      "</p></div>";
+    return;
+  }
+
+  const vistos = new Set();
+  let html = '<p class="texto-suave">' + hits.length +
+    (hits.length === 1 ? " coincidencia" : " coincidencias") + "</p>";
+  hits.forEach((h) => {
+    const clave = h.ref.id + "|" + h.campo;
+    if (vistos.has(clave)) return;
+    vistos.add(clave);
+    html += tarjetaResultado(h, q);
+  });
+  cont.innerHTML = html;
+  enganchesFotos(cont);
+}
+
+const NOMBRE_TIPO = {
+  exacta: "Exacta", confusion: "Confusión de caracteres",
+  cola: "Contiene", cerca: "A un carácter"
+};
+
+function tarjetaResultado(h, q) {
+  const d = h.ref;
+  const v = d.vehiculo || {};
+  const tit = (d.titulares || []).map((t) => t.nombre).filter(Boolean).join(" · ");
+  const fotos = d.fotos || [];
+  return `<div class="card">
+    <div class="fila" style="justify-content:space-between; align-items:flex-start;">
+      <div>
+        <span class="badge tipo-${h.tipo}">${NOMBRE_TIPO[h.tipo]}</span>
+        <span class="texto-suave"> en ${escapar(h.campo)}</span>
+      </div>
+    </div>
+    <p class="ident" style="margin:8px 0 4px;">${resaltar(h.valor, q)}</p>
+    <div class="dato"><strong>${escapar(v.marca || "—")} ${escapar(v.modelo || "")}</strong>
+      ${v.anio ? " · " + v.anio : ""} ${v.tipo ? " · " + escapar(v.tipo) : ""}</div>
+    <div class="dato">Matrícula ${escapar(d.matricula || "—")} ·
+      Padrón ${escapar(d.padron || "—")}${d.emisor ? " · " + escapar(d.emisor) : ""}</div>
+    <div class="dato">Chasis <span class="ident">${escapar(v.nroChasis || "—")}</span></div>
+    <div class="dato">Motor <span class="ident">${escapar(v.nroMotor || "—")}</span></div>
+    ${tit ? '<div class="dato">Titular: ' + escapar(tit) + "</div>" : ""}
+    ${d.ubicacion ? '<div class="dato">Está en: <strong>' + escapar(d.ubicacion) + "</strong></div>" : ""}
+    ${d.notas ? '<div class="dato">' + escapar(d.notas) + "</div>" : ""}
+    <div class="fila-fotos">${fotos.map((u, i) =>
+      `<img class="mini verFoto" src="${escapar(u)}" data-doc="${d.id}" data-i="${i}" alt="Documento">`
+    ).join("")}</div>
+    <p class="texto-suave" style="margin:4px 0 0; font-size:12px;">
+      Cargado por ${escapar(d.confirmadoNombre || "—")} el ${fmtFecha(d.confirmadoEn || d.creadoEn)}
+    </p>
+  </div>`;
+}
+
+/** Marca en el valor la parte que coincide con lo buscado. */
+function resaltar(valor, q) {
+  const canon = canonizar(valor);
+  const qc = canonizar(q);
+  const i = canon.indexOf(qc);
+  if (i < 0) return escapar(valor);
+  // Recorrer el original salteando lo que canonizar() descarta.
+  let salida = "", pos = 0;
+  for (const ch of String(valor)) {
+    const cuenta = /[A-Za-z0-9]/.test(ch);
+    const dentro = cuenta && pos >= i && pos < i + qc.length;
+    salida += (dentro ? "<b>" + escapar(ch) + "</b>" : escapar(ch));
+    if (cuenta) pos++;
+  }
+  return salida;
+}
+
+function enganchesFotos(cont) {
+  cont.querySelectorAll(".verFoto").forEach((img) => {
+    img.addEventListener("click", () => {
+      const d = docs.find((x) => x.id === img.dataset.doc)
+        || pendientes[Number(img.dataset.doc)];
+      mostrarFoto((d && d.fotos) || [img.src], Number(img.dataset.i) || 0);
+    });
+  });
+}
+
+// ---------- Cargar: leer el JSON ----------
+document.getElementById("btnLeerJson").addEventListener("click", () => {
+  const txt = document.getElementById("txtJson").value.trim();
+  if (!txt) { toast("Pegá el JSON primero.", "error"); return; }
+  let datos;
+  try {
+    // Por si viene envuelto en ``` o ```json.
+    datos = JSON.parse(txt.replace(/^```(json)?/i, "").replace(/```$/, "").trim());
+  } catch (e) {
+    toast("Ese texto no es JSON válido: " + e.message, "error");
+    return;
+  }
+  const lista = Array.isArray(datos) ? datos : [datos];
+  pendientes = lista.map(normalizar);
+  document.getElementById("txtJson").value = "";
+  pintarPendientes();
+  toast(pendientes.length + (pendientes.length === 1 ? " registro para revisar." : " registros para revisar."), "ok");
+});
+
+document.getElementById("btnVacio").addEventListener("click", () => {
+  pendientes.push(normalizar({}));
+  pintarPendientes();
+});
+
+/** Completa el esquema con lo que falte, sin inventar valores. */
+function normalizar(o) {
+  const v = o.vehiculo || {};
+  return {
+    emisor: o.emisor ?? null,
+    matricula: o.matricula ?? null,
+    padron: o.padron ?? null,
+    codigoNacional: o.codigoNacional ?? null,
+    divNro: o.divNro ?? null,
+    afectacion: o.afectacion ?? null,
+    vehiculo: {
+      marca: v.marca ?? null, modelo: v.modelo ?? null, anio: v.anio ?? null,
+      tipo: v.tipo ?? null, atributo: v.atributo ?? null,
+      cilindros: v.cilindros ?? null, cilindrada: v.cilindrada ?? null,
+      combustible: v.combustible ?? null, pbtKg: v.pbtKg ?? null,
+      ejes: v.ejes ?? null, pasajeros: v.pasajeros ?? null,
+      nroMotor: v.nroMotor ?? null, nroChasis: v.nroChasis ?? null
+    },
+    titulares: Array.isArray(o.titulares) ? o.titulares : [],
+    cantidadTitulares: o.cantidadTitulares ?? null,
+    leasing: o.leasing ?? null,
+    observaciones: o.observaciones ?? null,
+    empadronado: o.empadronado ?? null,
+    emitido: o.emitido ?? null,
+    extra: o.extra || {},
+    dudas: Array.isArray(o.dudas) ? o.dudas : [],
+    fotos: [],
+    ubicacion: "",
+    notas: ""
+  };
+}
+
+const CAMPOS_FORM = [
+  ["matricula", "Matrícula", "matricula"],
+  ["padron", "Padrón", "padron"],
+  ["codigoNacional", "Código Nacional", "codigoNacional"],
+  ["divNro", "DIV Nº", "divNro"],
+  ["emisor", "Departamento", "emisor"],
+  ["afectacion", "Afectación", "afectacion"],
+  ["vehiculo.marca", "Marca", "marca"],
+  ["vehiculo.modelo", "Modelo", "modelo"],
+  ["vehiculo.anio", "Año", "anio"],
+  ["vehiculo.tipo", "Tipo", "tipo"],
+  ["vehiculo.cilindrada", "Cilindrada", "cilindrada"],
+  ["vehiculo.combustible", "Combustible", "combustible"]
+];
+
+function pintarPendientes() {
+  const cont = document.getElementById("pendientes");
+  if (!pendientes.length) { cont.innerHTML = ""; return; }
+
+  cont.innerHTML = pendientes.map((p, i) => {
+    if (p.guardado) {
+      return `<div class="card"><span class="badge ok">Guardado</span>
+        <span class="ident"> ${escapar(p.vehiculo.nroChasis || p.matricula || "—")}</span></div>`;
+    }
+    const duda = (c) => p.dudas.some((d) =>
+      String(d).toLowerCase().includes(c.split(".").pop().toLowerCase()));
+    const inp = (via, label, id) => `
+      <div class="${duda(via) ? "duda" : ""}">
+        <label for="f-${i}-${id}">${escapar(label)}${duda(via) ? " ⚠" : ""}</label>
+        <input type="text" id="f-${i}-${id}" data-via="${via}" data-idx="${i}"
+               class="campoDoc" value="${escapar(valorEn(p, via) ?? "")}">
+      </div>`;
+
+    return `<div class="card">
+      <div class="fila" style="justify-content:space-between;">
+        <strong>Registro ${i + 1} de ${pendientes.length}</strong>
+        <button class="btn secundario btnQuitar" data-idx="${i}">
+          <span class="material-icons">close</span></button>
+      </div>
+
+      ${p.dudas.length ? '<p class="texto-suave duda" style="margin:8px 0;">' +
+        "El modelo dudó de: <strong>" + escapar(p.dudas.join(", ")) +
+        "</strong>. Cotejá esos campos contra la foto.</p>" : ""}
+
+      <label>Chasis <span class="texto-suave">— el número que más importa</span></label>
+      <input type="text" class="campoDoc ident" data-via="vehiculo.nroChasis" data-idx="${i}"
+             id="f-${i}-chasis" value="${escapar(p.vehiculo.nroChasis ?? "")}">
+      <p class="texto-suave" id="g-${i}-chasis"></p>
+
+      <label>Motor</label>
+      <input type="text" class="campoDoc ident" data-via="vehiculo.nroMotor" data-idx="${i}"
+             id="f-${i}-motor" value="${escapar(p.vehiculo.nroMotor ?? "")}">
+      <p class="texto-suave" id="g-${i}-motor"></p>
+
+      <div class="campo-doble">${CAMPOS_FORM.map((c) => inp(c[0], c[1], c[2])).join("")}</div>
+
+      <label for="t-${i}">Titular(es)</label>
+      <input type="text" id="t-${i}" value="${escapar((p.titulares || []).map((t) => t.nombre).filter(Boolean).join(" · "))}"
+             placeholder="APELLIDO NOMBRE">
+
+      <label for="u-${i}">Dónde está el documento</label>
+      <input type="text" id="u-${i}" value="${escapar(p.ubicacion)}"
+             placeholder="Caja, carpeta, estante…">
+
+      <label for="n-${i}">Notas</label>
+      <textarea id="n-${i}" rows="2">${escapar(p.notas)}</textarea>
+
+      <label>Foto del documento</label>
+      <div class="fila">
+        <label class="btn secundario">
+          <span class="material-icons">photo_camera</span> Cámara
+          <input type="file" accept="image/*" capture="environment"
+                 class="inpFoto" data-idx="${i}" hidden></label>
+        <label class="btn secundario">
+          <span class="material-icons">photo_library</span> Galería
+          <input type="file" accept="image/*" class="inpFoto" data-idx="${i}" hidden></label>
+      </div>
+      <div class="fila-fotos">${(p.fotos || []).map((u, k) =>
+        `<img class="mini verFoto" src="${escapar(u)}" data-doc="${i}" data-i="${k}" alt="Documento">`
+      ).join("")}</div>
+
+      <button class="btn btnGuardarDoc" data-idx="${i}">
+        <span class="material-icons">save</span> Confirmar y guardar</button>
+    </div>`;
+  }).join("");
+
+  // Grupos de 4 para poder cotejar el número carácter por carácter.
+  pendientes.forEach((p, i) => {
+    if (p.guardado) return;
+    pintarGrupos(i, "chasis", p.vehiculo.nroChasis);
+    pintarGrupos(i, "motor", p.vehiculo.nroMotor);
+  });
+
+  cont.querySelectorAll(".campoDoc").forEach((el) => {
+    el.addEventListener("input", () => {
+      const i = Number(el.dataset.idx);
+      const via = el.dataset.via;
+      const partes = via.split(".");
+      const destino = partes.length === 2 ? pendientes[i][partes[0]] : pendientes[i];
+      destino[partes[partes.length - 1]] = el.value.trim() || null;
+      if (via.endsWith("nroChasis")) pintarGrupos(i, "chasis", el.value);
+      if (via.endsWith("nroMotor")) pintarGrupos(i, "motor", el.value);
+    });
+  });
+
+  cont.querySelectorAll(".btnQuitar").forEach((b) => {
+    b.addEventListener("click", () => {
+      pendientes.splice(Number(b.dataset.idx), 1);
+      pintarPendientes();
+    });
+  });
+
+  cont.querySelectorAll(".inpFoto").forEach((inp) => {
+    inp.addEventListener("change", async () => {
+      const i = Number(inp.dataset.idx);
+      const f = inp.files && inp.files[0];
+      if (!f) return;
+      toast("Subiendo foto…", "ok");
+      try {
+        // 2000px: hay que poder leer un chasis de 17 caracteres.
+        const url = await subirFoto(f, "documentos", 2000);
+        pendientes[i].fotos.push(url);
+        pintarPendientes();
+        toast("Foto agregada.", "ok");
+      } catch (e) {
+        console.error(e);
+        toast(e.message, "error");
+      }
+      inp.value = "";
+    });
+  });
+
+  cont.querySelectorAll(".btnGuardarDoc").forEach((b) => {
+    b.addEventListener("click", () => guardar(Number(b.dataset.idx), b));
+  });
+
+  enganchesFotos(cont);
+}
+
+function pintarGrupos(i, cual, valor) {
+  const el = document.getElementById("g-" + i + "-" + cual);
+  if (!el) return;
+  const c = canonizar(valor);
+  if (!c) { el.innerHTML = ""; return; }
+  const grupos = c.match(/.{1,4}/g) || [];
+  el.innerHTML = '<span class="grupos">' +
+    grupos.map((g) => "<span>" + escapar(g) + "</span>").join("") +
+    "</span> <span style='font-size:12px'>" + c.length + " caracteres</span>";
+}
+
+// ---------- Guardar ----------
+async function guardar(i, btn) {
+  const p = pendientes[i];
+  const chasis = p.vehiculo.nroChasis;
+  const motor = p.vehiculo.nroMotor;
+
+  if (!chasis && !motor && !p.matricula) {
+    toast("Cargá al menos chasis, motor o matrícula.", "error");
+    return;
+  }
+  if (!p.fotos.length &&
+      !confirm("Este registro no tiene foto del documento.\n\n" +
+               "Sin foto, después no hay con qué verificar el número. ¿Guardar igual?")) {
+    return;
+  }
+
+  // Duplicado: fotografiar dos veces la misma libreta es el error más
+  // común de una carga larga.
+  if (chasis) {
+    const rep = docs.find((d) =>
+      canonizar(d.vehiculo && d.vehiculo.nroChasis) === canonizar(chasis));
+    if (rep && !confirm(
+      "Ya hay un documento cargado con ese chasis:\n\n" +
+      ((rep.vehiculo.marca || "") + " " + (rep.vehiculo.modelo || "")).trim() +
+      " · matrícula " + (rep.matricula || "—") + "\n\n¿Guardar otro igual?")) return;
+  }
+
+  const u = usuario() || {};
+  const titTexto = document.getElementById("t-" + i).value.trim();
+  const registro = Object.assign({}, p, {
+    titulares: titTexto
+      ? titTexto.split("·").map((n) => ({ nombre: n.trim(), ciRut: null })).filter((t) => t.nombre)
+      : p.titulares,
+    ubicacion: document.getElementById("u-" + i).value.trim(),
+    notas: document.getElementById("n-" + i).value.trim(),
+    // Formas canonizadas, para que el cruce contra las motos del
+    // inventario no tenga que recalcularlas. Los originales quedan
+    // intactos: la libreta es la evidencia.
+    canonChasis: canonizar(chasis),
+    canonMotor: canonizar(motor),
+    canonMatricula: canonizar(p.matricula),
+    confirmadoPor: u.uid || null,
+    confirmadoNombre: u.nombre || null,
+    confirmadoEn: serverTimestamp(),
+    creadoEn: serverTimestamp()
+  });
+  delete registro.guardado;
+
+  btn.disabled = true;
+  try {
+    const id = "doc-" + (canonizar(chasis) || canonizar(motor) || canonizar(p.matricula));
+    await setDoc(doc(db, "documentos", id), registro);
+    p.guardado = true;
+    await cargarDocs();
+    pintarPendientes();
+    toast("Documento guardado.", "ok");
+  } catch (e) {
+    console.error(e);
+    toast("No se pudo guardar: " + (e.code || e.message), "error");
+    btn.disabled = false;
+  }
+}
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
+}
+</script>
+</body>
+</html>

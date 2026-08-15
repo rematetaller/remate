@@ -1,7 +1,22 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.6)
+// utils.js — Núcleo compartido de remateTaller (v1.8)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
+//
+// v1.8 (tanda 15):
+//  · Permiso `documentos` y su ítem de navegación.
+//  · Búsqueda por aproximación de identificadores (motor, chasis,
+//    matrícula): canonizar(), plegar() y buscarIdentificador(). Viven
+//    en el núcleo porque los van a usar dos pantallas: documentos.html
+//    y, cuando exista, el cruce contra las motos del inventario.
+//
+// v1.7 (tanda 13):
+//  · PERMISOS: catálogo único, `puede()`, `esAdmin()`, presets de alta y
+//    navegación filtrada. El catálogo vive acá y solo acá: lo leen la
+//    navegación, el editor de usuarios y las reglas de Firestore, que son
+//    las que de verdad los aplican.
+//  · crearCuentaAuth(): crea la cuenta de Auth desde el panel con una
+//    instancia secundaria de Firebase, para no perder la sesión propia.
 //
 // v1.6 (tanda 12):
 //  · HOJA DE CUENTA detrás del avatar de la topbar: quién sos,
@@ -22,9 +37,10 @@
 //    mensaje que dice qué pasó.
 // =====================================================
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
-  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
+  createUserWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
@@ -70,8 +86,92 @@ export const CLOUDINARY = {
 // navegación y la hoja de cuenta. Las páginas lo piden con usuario().
 let _usuario = null;
 
-/** { uid, email, nombre, rol, activo } o null si no hay sesión verificada. */
+/** { uid, email, nombre, rol, activo, permisos } o null si no hay sesión. */
 export function usuario() { return _usuario; }
+
+// ---------- PERMISOS ----------
+// FUENTE ÚNICA del catálogo. Lo usan la navegación, el editor de usuarios
+// y las reglas de Firestore. Un permiso que no está acá no existe — y si
+// está acá pero no está en las reglas, es decoración: la interfaz esconde
+// botones, el servidor es el que dice no.
+export const PERMISOS = [
+  {
+    id: "inventario", label: "Inventario", icono: "inventory_2",
+    detalle: "Cargar y editar artículos con fotos, categorías y stock. " +
+      "SIN tocar precios ni moneda."
+  },
+  {
+    id: "cobros", label: "Registrar cobros", icono: "payments",
+    detalle: "Anotar pagos de una venta. Necesita ver la venta."
+  },
+  {
+    id: "entregas", label: "Entregas", icono: "local_shipping",
+    detalle: "Mover el estado de entrega: preparada y entregada."
+  },
+  {
+    id: "llaves", label: "Llaves de compradores", icono: "vpn_key",
+    detalle: "Crear y revocar llaves. Es el trato con el cliente."
+  },
+  {
+    id: "documentos", label: "Documentación", icono: "description",
+    detalle: "Cargar y buscar libretas de propiedad: motor, chasis, matrícula. " +
+      "Datos de terceros: no es público."
+  },
+  {
+    id: "validar", label: "Precios y validación", icono: "price_check",
+    detalle: "Poner precios, tasar lo pendiente y pasar un pedido a venta. " +
+      "Es el acuerdo económico."
+  }
+];
+
+// Combinaciones típicas, para que dar de alta sea un toque y no cinco.
+export const PRESETS = [
+  { id: "ayudante", label: "Ayudante", permisos: ["inventario", "cobros", "entregas"] },
+  { id: "gestion",  label: "Gestión",  permisos: ["inventario", "cobros", "entregas", "llaves", "validar", "documentos"] }
+];
+
+/** El rol 'admin' puede todo, y además usuarios, textos públicos y borrados. */
+export function esAdmin() {
+  return !!_usuario && _usuario.rol === "admin";
+}
+
+/** ¿Tiene este permiso? Acepta un id o un array de ids (alguno alcanza). */
+export function puede(permiso) {
+  if (!_usuario) return false;
+  if (esAdmin()) return true;
+  const p = _usuario.permisos || {};
+  if (Array.isArray(permiso)) return permiso.some((x) => p[x] === true);
+  return p[permiso] === true;
+}
+
+/**
+ * Crea la cuenta en Auth desde el panel, con una instancia secundaria de
+ * Firebase: con la instancia principal, crear un usuario te deja logueado
+ * como él y te tira de tu propia sesión. Devuelve el uid.
+ * NO crea la ficha en `usuarios` — eso lo hace la página, que es la que
+ * sabe el nombre y los permisos.
+ */
+export async function crearCuentaAuth(email, clave) {
+  const app2 = getApps().find((a) => a.name === "alta-usuarios")
+    || initializeApp(firebaseConfig, "alta-usuarios");
+  const auth2 = getAuth(app2);
+  const cred = await createUserWithEmailAndPassword(auth2, email, clave);
+  const uid = cred.user.uid;
+  await signOut(auth2);
+  return uid;
+}
+
+/**
+ * Contraseña inicial al azar. Nadie la memoriza ni la comparte: la persona
+ * entra por "Recuperar contraseña" en login.html. Existe solo porque Auth
+ * exige una para crear la cuenta.
+ */
+export function generarClave() {
+  const chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let c = "";
+  for (let i = 0; i < 12; i++) c += chars[Math.floor(Math.random() * chars.length)];
+  return c;
+}
 
 /**
  * Verifica sesión + usuario activo en Firestore.
@@ -245,13 +345,17 @@ export function tsAms(v) {
 // NAVEGACIÓN INTERNA (mobile-first)
 // =====================================================
 
+// `permiso: null` → visible para cualquiera activo.
+// `permiso: 'x'` o `[...]` → pide ese permiso, o alguno de la lista.
+// `soloAdmin: true` → solo el rol admin.
 const NAV_ITEMS = [
-  { id: "panel",         label: "Inicio",     icon: "home",          href: "panel.html" },
-  { id: "inventario",    label: "Inventario", icon: "inventory_2",   href: "inventario.html" },
-  { id: "llaves",        label: "Llaves",     icon: "vpn_key",       href: "llaves.html" },
-  { id: "pedidos",       label: "Pedidos",    icon: "shopping_cart", href: "pedidos.html" },
-  { id: "ventas",        label: "Ventas",     icon: "receipt_long",  href: "ventas.html" },
-  { id: "configuracion", label: "Config.",    icon: "settings",      href: "configuracion.html" }
+  { id: "panel",         label: "Inicio",     icon: "home",          href: "panel.html",         permiso: null },
+  { id: "inventario",    label: "Inventario", icon: "inventory_2",   href: "inventario.html",    permiso: ["inventario", "validar"] },
+  { id: "llaves",        label: "Llaves",     icon: "vpn_key",       href: "llaves.html",        permiso: "llaves" },
+  { id: "pedidos",       label: "Pedidos",    icon: "shopping_cart", href: "pedidos.html",       permiso: "validar" },
+  { id: "ventas",        label: "Ventas",     icon: "receipt_long",  href: "ventas.html",        permiso: ["cobros", "entregas", "validar"] },
+  { id: "documentos",    label: "Documentos", icon: "description",   href: "documentos.html",    permiso: "documentos" },
+  { id: "configuracion", label: "Config.",    icon: "settings",      href: "configuracion.html", soloAdmin: true }
 ];
 
 export function renderNav(actual) {
@@ -265,7 +369,7 @@ export function renderNav(actual) {
         escapar(nombre) + '">' + escapar(inicialesDe(nombre)) + "</button>" +
     "</div>" +
     '<nav class="nav-scroll">';
-  NAV_ITEMS.forEach((p) => {
+  NAV_ITEMS.filter(visibleParaMi).forEach((p) => {
     const cls = p.id === actual ? "nav-link activo" : "nav-link";
     html += '<a href="' + p.href + '" class="' + cls + '"><span class="material-icons">' +
       p.icon + "</span><span>" + p.label + "</span></a>";
@@ -276,6 +380,28 @@ export function renderNav(actual) {
   // fuera de pantalla en un teléfono. Ahora está en la hoja de cuenta.
   document.getElementById("rtBtnCuenta")
     .addEventListener("click", mostrarCuenta);
+}
+
+function visibleParaMi(item) {
+  if (item.soloAdmin) return esAdmin();
+  if (!item.permiso) return true;
+  return puede(item.permiso);
+}
+
+/**
+ * Corta el paso en una página que la persona no tiene habilitada. La
+ * navegación ya la esconde, pero se puede llegar por una URL escrita a
+ * mano o por un enlace viejo. Devuelve false si no puede: la página corta
+ * ahí y no sigue cargando.
+ */
+export function exigirPermiso(permiso) {
+  if (permiso === "admin" ? esAdmin() : puede(permiso)) return true;
+  mostrarSinAcceso(
+    "Esta sección no está habilitada para tu cuenta.",
+    "Si la necesitás para trabajar, pedile a un administrador que te la habilite.",
+    ""
+  );
+  return false;
 }
 
 /** Iniciales para el avatar: "Florencia" → "F", "Ana María" → "AM". */
@@ -552,6 +678,95 @@ export function iniciarAyuda(titulo, html) {
   b.setAttribute("role", "button");
   b.addEventListener("click", () => mostrarAyuda(titulo, html));
   h1.appendChild(b);
+}
+
+// =====================================================
+// IDENTIFICADORES — búsqueda por aproximación
+// Motor, chasis y matrícula se guardan TAL COMO ESTÁN EN EL PAPEL: la
+// libreta es la evidencia y sacarle los espacios al guardar es perder
+// fidelidad. La normalización se hace acá, en memoria, al buscar.
+// Con menos de 200 registros esto es instantáneo.
+// =====================================================
+
+/** Forma comparable: mayúsculas, sin espacios, guiones ni puntos. */
+export function canonizar(v) {
+  return String(v == null ? "" : v).toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+/**
+ * Pliega los caracteres que el ojo y el OCR intercambian, para que
+ * "L1PGHKK2XC0810010" y "LIPGHKK2XCO81OO1O" caigan en la misma forma.
+ * Dato útil: el estándar de chasis NO usa I, O ni Q — si aparecen, casi
+ * siempre son 1 y 0 mal leídos. Casi: las motos importadas baratas no
+ * siempre respetan el estándar, así que esto es una pista, no una ley.
+ */
+export function plegar(v) {
+  return canonizar(v)
+    .replace(/[IO]/g, (c) => (c === "I" ? "1" : "0"))
+    .replace(/Q/g, "0").replace(/S/g, "5").replace(/B/g, "8")
+    .replace(/G/g, "6").replace(/Z/g, "2");
+}
+
+/** Distancia de edición, cortada en `tope` para no perder tiempo. */
+export function distancia(a, b, tope = 2) {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > tope) return tope + 1;
+  let fila = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let ant = fila[0];
+    fila[0] = i;
+    let mejor = fila[0];
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = fila[j];
+      fila[j] = a[i - 1] === b[j - 1]
+        ? ant
+        : 1 + Math.min(ant, fila[j], fila[j - 1]);
+      ant = tmp;
+      if (fila[j] < mejor) mejor = fila[j];
+    }
+    if (mejor > tope) return tope + 1;
+  }
+  return fila[b.length];
+}
+
+/**
+ * Busca `texto` contra una lista de candidatos y devuelve los que
+ * coinciden, ordenados de más fuerte a más débil.
+ *
+ * candidatos: [{ valor, campo, ref }] — `valor` como está en el papel,
+ * `campo` para poder decir DÓNDE coincidió, `ref` lo que quiera el que
+ * llama (el documento entero, normalmente).
+ *
+ * Devuelve [{ ...candidato, tipo, canon }] con tipo:
+ *   'exacta'   — igual, ignorando espacios y guiones
+ *   'confusion'— igual plegando O/0, I/1, S/5, B/8, G/6, Z/2
+ *   'cola'     — el buscado está contenido (leer los últimos dígitos de
+ *                una chapa sucia es el caso más común de todos)
+ *   'cerca'    — a uno o dos caracteres de distancia
+ *
+ * IMPORTANTE: esto PROPONE. Que la libreta corresponda a esa moto lo
+ * afirma una persona, y queda registrado con nombre y fecha.
+ */
+export function buscarIdentificador(texto, candidatos, minParcial = 4) {
+  const q = canonizar(texto);
+  if (q.length < 3) return [];
+  const qp = plegar(texto);
+  const orden = { exacta: 0, confusion: 1, cola: 2, cerca: 3 };
+  const salida = [];
+
+  candidatos.forEach((c) => {
+    const canon = canonizar(c.valor);
+    if (!canon) return;
+    const pleg = plegar(c.valor);
+    let tipo = null;
+    if (canon === q) tipo = "exacta";
+    else if (pleg === qp) tipo = "confusion";
+    else if (q.length >= minParcial && (pleg.includes(qp) || qp.includes(pleg))) tipo = "cola";
+    else if (distancia(qp, pleg, 2) <= 2) tipo = "cerca";
+    if (tipo) salida.push(Object.assign({}, c, { tipo, canon }));
+  });
+
+  return salida.sort((a, b) => orden[a.tipo] - orden[b.tipo]);
 }
 
 // =====================================================
