@@ -1,7 +1,14 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.9)
+// utils.js — Núcleo compartido de remateTaller (v1.10)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
+//
+// v1.10 (tanda 17):
+//  · `esSinDato()`: reconoce los "X", "S/N", "-" con que las libretas
+//    viejas dicen que un número NO EXISTE. Antes se guardaban como si
+//    fueran el número, y dos libretas sin chasis compartían el mismo id.
+//  · La coincidencia parcial arranca en 3 caracteres, no en 4: buscar
+//    "KMQ" tiene que encontrar la matrícula "KMQ 607".
 //
 // v1.9 (tanda 16):
 //  · `seccionesDisponibles()`: la lista de secciones que esta persona
@@ -711,6 +718,21 @@ export function iniciarAyuda(titulo, html) {
 // Con menos de 200 registros esto es instantáneo.
 // =====================================================
 
+/**
+ * Marcas de "este número no existe". Las libretas viejas de motos —de los
+ * 50 y 60, cuando no se numeraba el chasis— traen una X, un guión o S/N en
+ * el renglón. Eso NO es un identificador: si se guarda como si lo fuera,
+ * dos libretas distintas comparten el mismo valor, chocan en el id y una
+ * pisa a la otra. Pasó con dos Lambretta y una Rabeneick.
+ */
+const SIN_DATO = ["", "X", "XX", "XXX", "SN", "SIN", "SINNUMERO", "NA", "NO",
+                  "0", "00", "000", "NINGUNO", "S0", "S0N"];
+
+export function esSinDato(v) {
+  const c = canonizar(v);
+  return c.length < 3 || SIN_DATO.indexOf(c) !== -1;
+}
+
 /** Forma comparable: mayúsculas, sin espacios, guiones ni puntos. */
 export function canonizar(v) {
   return String(v == null ? "" : v).toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -763,14 +785,15 @@ export function distancia(a, b, tope = 2) {
  * Devuelve [{ ...candidato, tipo, canon }] con tipo:
  *   'exacta'   — igual, ignorando espacios y guiones
  *   'confusion'— igual plegando O/0, I/1, S/5, B/8, G/6, Z/2
- *   'cola'     — el buscado está contenido (leer los últimos dígitos de
- *                una chapa sucia es el caso más común de todos)
+ *   'cola'     — el buscado está contenido, desde 3 caracteres (leer los
+ *                últimos dígitos de una chapa sucia, o las tres letras de
+ *                una matrícula, son los casos más comunes de todos)
  *   'cerca'    — a uno o dos caracteres de distancia
  *
  * IMPORTANTE: esto PROPONE. Que la libreta corresponda a esa moto lo
  * afirma una persona, y queda registrado con nombre y fecha.
  */
-export function buscarIdentificador(texto, candidatos, minParcial = 4) {
+export function buscarIdentificador(texto, candidatos, minParcial = 3) {
   const q = canonizar(texto);
   if (q.length < 3) return [];
   const qp = plegar(texto);
@@ -779,7 +802,8 @@ export function buscarIdentificador(texto, candidatos, minParcial = 4) {
 
   candidatos.forEach((c) => {
     const canon = canonizar(c.valor);
-    if (!canon) return;
+    // Un "X" de chasis inexistente no puede coincidir con nada.
+    if (!canon || esSinDato(c.valor)) return;
     const pleg = plegar(c.valor);
     let tipo = null;
     if (canon === q) tipo = "exacta";
@@ -790,6 +814,21 @@ export function buscarIdentificador(texto, candidatos, minParcial = 4) {
   });
 
   return salida.sort((a, b) => orden[a.tipo] - orden[b.tipo]);
+}
+
+/**
+ * ID determinístico de un documento, con el prefijo del campo que lo
+ * identifica: `doc-ch-…` por chasis, `doc-mo-…` por motor, `doc-ma-…` por
+ * matrícula. El prefijo evita que un motor y un chasis con el mismo número
+ * choquen, y bajar en la lista permite guardar libretas sin chasis —que
+ * son muchas, en motos viejas— sin que se pisen entre ellas.
+ * Devuelve null si no hay ningún identificador real.
+ */
+export function idDocumento({ chasis, motor, matricula } = {}) {
+  if (!esSinDato(chasis)) return "doc-ch-" + canonizar(chasis);
+  if (!esSinDato(motor)) return "doc-mo-" + canonizar(motor);
+  if (!esSinDato(matricula)) return "doc-ma-" + canonizar(matricula);
+  return null;
 }
 
 // =====================================================

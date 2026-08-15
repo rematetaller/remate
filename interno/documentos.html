@@ -89,7 +89,7 @@ import {
   verificarAuth, renderNav, db, toast, iniciarAyuda, escapar,
   doc, setDoc, collection, getDocs, serverTimestamp,
   subirFoto, mostrarFoto, fmtFecha, usuario, exigirPermiso,
-  canonizar, buscarIdentificador
+  canonizar, buscarIdentificador, esSinDato, idDocumento
 } from "./utils.js";
 
 iniciarAyuda("Documentación de vehículos", `
@@ -121,8 +121,13 @@ aparecen resaltados: <strong>miralos contra la foto</strong>.</li>
 no se puede leer.</li>
 <li><strong>Sacá la foto siempre</strong>, incluso cargando a mano. Un número sin su foto
 no se puede auditar después.</li>
-<li>Si el chasis ya está cargado, el sistema avisa antes de guardar: fotografiar dos
+<li>Si el número ya está cargado, el sistema avisa antes de guardar: fotografiar dos
 veces la misma libreta es el error más común de una carga larga.</li>
+<li><strong>Motos viejas sin chasis:</strong> muchas libretas de los años 50 y 60 traen una
+<strong>X</strong> donde va el chasis, porque no se numeraba. Dejala así: el sistema lo
+entiende como "no tiene" y guarda el documento identificado por el <strong>motor</strong>,
+o por la <strong>matrícula</strong> si tampoco hay motor. Nunca lo trates como número: dos
+libretas con X no son la misma moto.</li>
 </ul>
 
 <h3>Qué NO hace</h3>
@@ -236,10 +241,13 @@ function tarjetaResultado(h, q) {
     </div>
     <p class="ident" style="margin:8px 0 4px;">${resaltar(h.valor, q)}</p>
     <div class="dato"><strong>${escapar(v.marca || "—")} ${escapar(v.modelo || "")}</strong>
-      ${v.anio ? " · " + v.anio : ""} ${v.tipo ? " · " + escapar(v.tipo) : ""}</div>
+      ${v.anio ? " · " + v.anio : ""} ${v.tipo ? " · " + escapar(v.tipo) : ""}
+      ${v.potencia ? " · " + escapar(v.potencia) : (v.cilindrada ? " · " + v.cilindrada + "cc" : "")}</div>
     <div class="dato">Matrícula ${escapar(d.matricula || "—")} ·
       Padrón ${escapar(d.padron || "—")}${d.emisor ? " · " + escapar(d.emisor) : ""}</div>
-    <div class="dato">Chasis <span class="ident">${escapar(v.nroChasis || "—")}</span></div>
+    <div class="dato">Chasis ${esSinDato(v.nroChasis)
+      ? '<span class="texto-suave">sin número (así viene en la libreta)</span>'
+      : '<span class="ident">' + escapar(v.nroChasis) + "</span>"}</div>
     <div class="dato">Motor <span class="ident">${escapar(v.nroMotor || "—")}</span></div>
     ${tit ? '<div class="dato">Titular: ' + escapar(tit) + "</div>" : ""}
     ${d.ubicacion ? '<div class="dato">Está en: <strong>' + escapar(d.ubicacion) + "</strong></div>" : ""}
@@ -320,8 +328,15 @@ function normalizar(o) {
       cilindros: v.cilindros ?? null, cilindrada: v.cilindrada ?? null,
       combustible: v.combustible ?? null, pbtKg: v.pbtKg ?? null,
       ejes: v.ejes ?? null, pasajeros: v.pasajeros ?? null,
+      // Las libretas viejas dicen "Potencia: 250 CC" y "Ruedas", y no
+      // traen cilindrada ni PBT. Entran como campos propios en vez de
+      // forzarlas a los del formato nuevo.
+      potencia: v.potencia ?? null, ruedas: v.ruedas ?? null,
+      vehiculo: v.vehiculo ?? null,
       nroMotor: v.nroMotor ?? null, nroChasis: v.nroChasis ?? null
     },
+    domicilio: o.domicilio ?? null,
+    localidad: o.localidad ?? null,
     titulares: Array.isArray(o.titulares) ? o.titulares : [],
     cantidadTitulares: o.cantidadTitulares ?? null,
     leasing: o.leasing ?? null,
@@ -348,7 +363,11 @@ const CAMPOS_FORM = [
   ["vehiculo.anio", "Año", "anio"],
   ["vehiculo.tipo", "Tipo", "tipo"],
   ["vehiculo.cilindrada", "Cilindrada", "cilindrada"],
-  ["vehiculo.combustible", "Combustible", "combustible"]
+  ["vehiculo.potencia", "Potencia", "potencia"],
+  ["vehiculo.ruedas", "Ruedas", "ruedas"],
+  ["vehiculo.combustible", "Combustible", "combustible"],
+  ["domicilio", "Domicilio", "domicilio"],
+  ["localidad", "Localidad", "localidad"]
 ];
 
 function pintarPendientes() {
@@ -380,7 +399,7 @@ function pintarPendientes() {
         "El modelo dudó de: <strong>" + escapar(p.dudas.join(", ")) +
         "</strong>. Cotejá esos campos contra la foto.</p>" : ""}
 
-      <label>Chasis <span class="texto-suave">— el número que más importa</span></label>
+      <label>Chasis <span class="texto-suave">— si la libreta dice X o S/N, dejalo así</span></label>
       <input type="text" class="campoDoc ident" data-via="vehiculo.nroChasis" data-idx="${i}"
              id="f-${i}-chasis" value="${escapar(p.vehiculo.nroChasis ?? "")}">
       <p class="texto-suave" id="g-${i}-chasis"></p>
@@ -480,6 +499,11 @@ function pintarGrupos(i, cual, valor) {
   if (!el) return;
   const c = canonizar(valor);
   if (!c) { el.innerHTML = ""; return; }
+  if (esSinDato(valor)) {
+    el.innerHTML = '<span style="font-size:12px">Sin número en la libreta. ' +
+      "Se va a identificar por motor o matrícula.</span>";
+    return;
+  }
   const grupos = c.match(/.{1,4}/g) || [];
   el.innerHTML = '<span class="grupos">' +
     grupos.map((g) => "<span>" + escapar(g) + "</span>").join("") +
@@ -492,8 +516,14 @@ async function guardar(i, btn) {
   const chasis = p.vehiculo.nroChasis;
   const motor = p.vehiculo.nroMotor;
 
-  if (!chasis && !motor && !p.matricula) {
-    toast("Cargá al menos chasis, motor o matrícula.", "error");
+  // El id sale del primer identificador REAL: chasis, motor o matrícula.
+  // Las motos de los 50 y 60 muchas veces no tienen chasis y la libreta
+  // pone una X — que no identifica nada, y si se usara como id todas esas
+  // libretas se pisarían entre ellas.
+  const id = idDocumento({ chasis, motor, matricula: p.matricula });
+  if (!id) {
+    toast("Necesito un número real: chasis, motor o matrícula. " +
+          "Una X o un S/N no identifican el documento.", "error");
     return;
   }
   if (!p.fotos.length &&
@@ -503,15 +533,14 @@ async function guardar(i, btn) {
   }
 
   // Duplicado: fotografiar dos veces la misma libreta es el error más
-  // común de una carga larga.
-  if (chasis) {
-    const rep = docs.find((d) =>
-      canonizar(d.vehiculo && d.vehiculo.nroChasis) === canonizar(chasis));
-    if (rep && !confirm(
-      "Ya hay un documento cargado con ese chasis:\n\n" +
-      ((rep.vehiculo.marca || "") + " " + (rep.vehiculo.modelo || "")).trim() +
-      " · matrícula " + (rep.matricula || "—") + "\n\n¿Guardar otro igual?")) return;
-  }
+  // común de una carga larga. Se compara por el id, que ya sabe cuál es
+  // el identificador que vale para este documento.
+  const rep = docs.find((d) => d.id === id);
+  if (rep && !confirm(
+    "Ya hay un documento cargado con ese número:\n\n" +
+    (((rep.vehiculo || {}).marca || "") + " " + ((rep.vehiculo || {}).modelo || "")).trim() +
+    " · matrícula " + (rep.matricula || "—") +
+    "\n\n¿Sobrescribirlo?")) return;
 
   const u = usuario() || {};
   const titTexto = document.getElementById("t-" + i).value.trim();
@@ -524,9 +553,12 @@ async function guardar(i, btn) {
     // Formas canonizadas, para que el cruce contra las motos del
     // inventario no tenga que recalcularlas. Los originales quedan
     // intactos: la libreta es la evidencia.
-    canonChasis: canonizar(chasis),
-    canonMotor: canonizar(motor),
-    canonMatricula: canonizar(p.matricula),
+    // Solo se canoniza lo que es un número de verdad: un "X" canonizado
+    // sería un identificador falso que hace coincidir motos sin relación.
+    canonChasis: esSinDato(chasis) ? null : canonizar(chasis),
+    canonMotor: esSinDato(motor) ? null : canonizar(motor),
+    canonMatricula: esSinDato(p.matricula) ? null : canonizar(p.matricula),
+    sinChasis: esSinDato(chasis),
     confirmadoPor: u.uid || null,
     confirmadoNombre: u.nombre || null,
     confirmadoEn: serverTimestamp(),
@@ -536,7 +568,6 @@ async function guardar(i, btn) {
 
   btn.disabled = true;
   try {
-    const id = "doc-" + (canonizar(chasis) || canonizar(motor) || canonizar(p.matricula));
     await setDoc(doc(db, "documentos", id), registro);
     p.guardado = true;
     await cargarDocs();
