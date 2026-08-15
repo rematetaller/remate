@@ -130,8 +130,23 @@ o por la <strong>matrícula</strong> si tampoco hay motor. Nunca lo trates como 
 libretas con X no son la misma moto.</li>
 </ul>
 
+<h3>Corregir algo ya cargado</h3>
+<ul>
+<li>En cada resultado de la búsqueda hay <strong>Corregir este documento</strong>: lo abre
+en la pestaña Cargar con todo lo que tiene, para arreglar un número mal leído, sumar la
+ubicación o agregar otra foto.</li>
+<li>Se sobrescribe el <strong>mismo</strong> registro, no se crea uno nuevo. Queda anotado
+quién lo editó y cuándo, sin perder la fecha de la carga original.</li>
+<li>Si corregís justo el número que identifica el documento, el registro conserva su
+identificador interno — la búsqueda usa los números corregidos, así que lo encuentra
+igual.</li>
+<li>Las fotos se pueden quitar del registro con la × y agregar otras.</li>
+</ul>
+
 <h3>Qué NO hace</h3>
 <ul>
+<li>No borra documentos: se corrigen. Borrar es solo del administrador y desde la consola,
+porque un documento cargado es evidencia.</li>
 <li>No vincula la libreta con un artículo del inventario. Eso viene después, y también lo
 va a firmar una persona.</li>
 <li>No es público: estos datos <strong>no</strong> se muestran en el catálogo del
@@ -220,6 +235,7 @@ function buscar() {
   });
   cont.innerHTML = html;
   enganchesFotos(cont);
+  enganchesEditar(cont);
 }
 
 const NOMBRE_TIPO = {
@@ -256,8 +272,12 @@ function tarjetaResultado(h, q) {
       `<img class="mini verFoto" src="${escapar(u)}" data-doc="${d.id}" data-i="${i}" alt="Documento">`
     ).join("")}</div>
     <p class="texto-suave" style="margin:4px 0 0; font-size:12px;">
-      Cargado por ${escapar(d.confirmadoNombre || "—")} el ${fmtFecha(d.confirmadoEn || d.creadoEn)}
+      Cargado por ${escapar(d.confirmadoNombre || "—")} el ${fmtFecha(d.creadoEn || d.confirmadoEn)}
+      ${d.editadoNombre ? "· editado por " + escapar(d.editadoNombre) +
+        " el " + fmtFecha(d.editadoEn) : ""}
     </p>
+    <button class="btn secundario btnEditar" data-doc="${d.id}" style="margin-top:10px;">
+      <span class="material-icons">edit</span> Corregir este documento</button>
   </div>`;
 }
 
@@ -276,6 +296,41 @@ function resaltar(valor, q) {
     if (cuenta) pos++;
   }
   return salida;
+}
+
+function enganchesEditar(cont) {
+  cont.querySelectorAll(".btnEditar").forEach((b) => {
+    b.addEventListener("click", () => {
+      const d = docs.find((x) => x.id === b.dataset.doc);
+      if (!d) return;
+      // Si ya está abierto para editar, no se duplica en la lista.
+      if (pendientes.findIndex((p) => p._id === d.id) === -1) {
+        pendientes.push(aPendiente(d));
+      }
+      pintarPendientes();
+      verTab("c");
+      window.scrollTo({ top: 0 });
+      toast("Abierto para corregir. Guardá cuando termines.", "ok");
+    });
+  });
+}
+
+/**
+ * Un documento guardado, en la forma que usa el formulario de carga.
+ * Conserva `_id` —el id con el que se guardó— y `_creadoEn`, para que
+ * guardar una corrección no cree un registro nuevo ni pierda la fecha
+ * original. También conserva `extra`, que puede traer campos de libretas
+ * con maquetas que todavía no previmos.
+ */
+function aPendiente(d) {
+  const p = normalizar(d);
+  p.fotos = (d.fotos || []).slice();
+  p.ubicacion = d.ubicacion || "";
+  p.notas = d.notas || "";
+  p.extra = d.extra || {};
+  p._id = d.id;
+  p._creadoEn = d.creadoEn || null;
+  return p;
 }
 
 function enganchesFotos(cont) {
@@ -390,10 +445,15 @@ function pintarPendientes() {
 
     return `<div class="card">
       <div class="fila" style="justify-content:space-between;">
-        <strong>Registro ${i + 1} de ${pendientes.length}</strong>
+        <strong>${p._id
+          ? "Corrigiendo " + escapar(p._id)
+          : "Registro " + (i + 1) + " de " + pendientes.length}</strong>
         <button class="btn secundario btnQuitar" data-idx="${i}">
           <span class="material-icons">close</span></button>
       </div>
+      ${p._id ? '<p class="texto-suave" style="margin:6px 0;">' +
+        "Ya está guardado. Al confirmar se sobrescribe el mismo registro, " +
+        "y queda anotado que lo editaste vos.</p>" : ""}
 
       ${p.dudas.length ? '<p class="texto-suave duda" style="margin:8px 0;">' +
         "El modelo dudó de: <strong>" + escapar(p.dudas.join(", ")) +
@@ -433,11 +493,19 @@ function pintarPendientes() {
           <input type="file" accept="image/*" class="inpFoto" data-idx="${i}" hidden></label>
       </div>
       <div class="fila-fotos">${(p.fotos || []).map((u, k) =>
-        `<img class="mini verFoto" src="${escapar(u)}" data-doc="${i}" data-i="${k}" alt="Documento">`
+        `<span style="position:relative; display:inline-block;">
+           <img class="mini verFoto" src="${escapar(u)}" data-doc="${i}" data-i="${k}" alt="Documento">
+           <button class="btnSacarFoto" data-idx="${i}" data-k="${k}"
+             title="Quitar de este registro"
+             style="position:absolute; top:-6px; right:-6px; width:24px; height:24px;
+                    border:none; border-radius:50%; background:#b45309; color:#fff;
+                    font-size:14px; line-height:1; cursor:pointer;">×</button>
+         </span>`
       ).join("")}</div>
 
       <button class="btn btnGuardarDoc" data-idx="${i}">
-        <span class="material-icons">save</span> Confirmar y guardar</button>
+        <span class="material-icons">save</span>
+        ${p._id ? "Guardar la corrección" : "Confirmar y guardar"}</button>
     </div>`;
   }).join("");
 
@@ -487,6 +555,15 @@ function pintarPendientes() {
     });
   });
 
+  cont.querySelectorAll(".btnSacarFoto").forEach((b) => {
+    b.addEventListener("click", () => {
+      // Sale del registro; el archivo queda en Cloudinary (borrarlo de
+      // verdad necesita el api_secret, que no puede estar en el cliente).
+      pendientes[Number(b.dataset.idx)].fotos.splice(Number(b.dataset.k), 1);
+      pintarPendientes();
+    });
+  });
+
   cont.querySelectorAll(".btnGuardarDoc").forEach((b) => {
     b.addEventListener("click", () => guardar(Number(b.dataset.idx), b));
   });
@@ -520,12 +597,24 @@ async function guardar(i, btn) {
   // Las motos de los 50 y 60 muchas veces no tienen chasis y la libreta
   // pone una X — que no identifica nada, y si se usara como id todas esas
   // libretas se pisarían entre ellas.
-  const id = idDocumento({ chasis, motor, matricula: p.matricula });
-  if (!id) {
+  const idDerivado = idDocumento({ chasis, motor, matricula: p.matricula });
+  if (!idDerivado) {
     toast("Necesito un número real: chasis, motor o matrícula. " +
           "Una X o un S/N no identifican el documento.", "error");
     return;
   }
+
+  // Corrigiendo: el registro CONSERVA su id, incluso si al corregir un
+  // número el id derivado sería otro. Mover el id significaría crear un
+  // documento nuevo y borrar el viejo — y borrar es solo de admin, así que
+  // en el medio quedaría un huérfano. El id es un id; lo que vale para
+  // buscar son los campos `canon…`, que se recalculan siempre.
+  const id = p._id || idDerivado;
+  if (p._id && p._id !== idDerivado && !confirm(
+    "Cambiaste el número que identifica este documento.\n\n" +
+    "El registro se guarda igual, con su identificador original (" + p._id + "). " +
+    "La búsqueda usa los números corregidos, así que va a encontrarlo bien.\n\n" +
+    "¿Guardar?")) return;
   if (!p.fotos.length &&
       !confirm("Este registro no tiene foto del documento.\n\n" +
                "Sin foto, después no hay con qué verificar el número. ¿Guardar igual?")) {
@@ -535,7 +624,7 @@ async function guardar(i, btn) {
   // Duplicado: fotografiar dos veces la misma libreta es el error más
   // común de una carga larga. Se compara por el id, que ya sabe cuál es
   // el identificador que vale para este documento.
-  const rep = docs.find((d) => d.id === id);
+  const rep = p._id ? null : docs.find((d) => d.id === id);
   if (rep && !confirm(
     "Ya hay un documento cargado con ese número:\n\n" +
     (((rep.vehiculo || {}).marca || "") + " " + ((rep.vehiculo || {}).modelo || "")).trim() +
@@ -562,9 +651,16 @@ async function guardar(i, btn) {
     confirmadoPor: u.uid || null,
     confirmadoNombre: u.nombre || null,
     confirmadoEn: serverTimestamp(),
-    creadoEn: serverTimestamp()
+    // La fecha de carga original no se toca al corregir; la corrección
+    // deja su propia marca. Igual que un cobro: quién y cuándo (§1.5).
+    creadoEn: p._creadoEn || serverTimestamp(),
+    editadoPor: p._id ? (u.uid || null) : null,
+    editadoNombre: p._id ? (u.nombre || null) : null,
+    editadoEn: p._id ? serverTimestamp() : null
   });
   delete registro.guardado;
+  delete registro._id;
+  delete registro._creadoEn;
 
   btn.disabled = true;
   try {
