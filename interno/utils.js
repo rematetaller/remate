@@ -1,7 +1,19 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.8)
+// utils.js — Núcleo compartido de remateTaller (v1.9)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
+//
+// v1.9 (tanda 16):
+//  · `seccionesDisponibles()`: la lista de secciones que esta persona
+//    puede abrir, sacada del MISMO NAV_ITEMS que pinta la barra. El panel
+//    la usa para sus accesos directos: una sola fuente, así no hay dos
+//    listas que se desincronicen.
+//
+// v1.8.1 — CORRECCIÓN: renderNav armaba la fila del avatar pero no
+//   inyectaba su CSS (solo lo hacía `mostrarCuenta`, o sea recién DESPUÉS
+//   de tocarlo). Resultado: un botón sin estilo, cuadrado, apilado debajo
+//   de la marca. Los estilos de un componente se inyectan cuando se
+//   PINTA, no cuando se usa.
 //
 // v1.8 (tanda 15):
 //  · Permiso `documentos` y su ítem de navegación.
@@ -361,6 +373,7 @@ const NAV_ITEMS = [
 export function renderNav(actual) {
   const el = document.getElementById("topbar");
   if (!el) return;
+  asegurarEstilosCuenta();
   const nombre = (_usuario && _usuario.nombre) || "";
   let html =
     '<div class="rt-topfila">' +
@@ -380,6 +393,15 @@ export function renderNav(actual) {
   // fuera de pantalla en un teléfono. Ahora está en la hoja de cuenta.
   document.getElementById("rtBtnCuenta")
     .addEventListener("click", mostrarCuenta);
+}
+
+/**
+ * Las secciones que esta persona puede abrir, sin "Inicio". Sale del
+ * mismo NAV_ITEMS que la barra: si mañana entra una sección nueva, entra
+ * en los dos lugares a la vez (§1.1).
+ */
+export function seccionesDisponibles() {
+  return NAV_ITEMS.filter((i) => i.id !== "panel").filter(visibleParaMi);
 }
 
 function visibleParaMi(item) {
@@ -416,7 +438,8 @@ function inicialesDe(nombre) {
 // =====================================================
 
 const CSS_CUENTA = `
-.rt-topfila { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.rt-topfila { display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding-right:16px; }
 .rt-avatar { flex:0 0 auto; width:36px; height:36px; border-radius:50%; border:none;
   background:var(--c-primario, #b45309); color:var(--c-primario-claro, #fef3e2);
   font-size:14px; font-weight:600; letter-spacing:.5px; cursor:pointer;

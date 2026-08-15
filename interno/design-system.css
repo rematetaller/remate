@@ -1,5 +1,5 @@
 /* =====================================================
-   design-system.css — remateTaller (v1.0)
+   design-system.css — remateTaller (v1.1)
    Mobile-first. Paleta sobria: gris taller + ámbar remate.
    ===================================================== */
 
@@ -50,28 +50,30 @@ body {
 }
 .brand .material-icons { font-size: 22px; }
 
+/* La barra ENVUELVE, no scrollea.
+   Scrolleaba horizontal hasta la v1.1, y con eso todo lo que pasaba del
+   quinto ítem quedaba fuera de pantalla en un teléfono: primero le pasó a
+   "Salir" y después a "Documentos". Un acceso que no se ve no existe.
+   Envolviendo, los siete entran en dos filas y se ven todos de una. */
 .nav-scroll {
   display: flex;
-  overflow-x: auto;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 0 8px 8px;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
 }
-.nav-scroll::-webkit-scrollbar { display: none; }
 
 .nav-link {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  min-width: 68px;
-  padding: 6px 10px;
+  flex: 1 1 68px;
+  max-width: 96px;
+  padding: 6px 6px;
   border-radius: var(--radio);
   text-decoration: none;
   color: var(--c-texto-suave);
   font-size: 12px;
-  flex-shrink: 0;
 }
 .nav-link .material-icons { font-size: 22px; }
 .nav-link.activo {
@@ -115,6 +117,32 @@ h2 { font-size: 18px; margin: 20px 0 10px; }
 }
 .kpi .num { font-size: 26px; font-weight: 700; color: var(--c-primario); }
 .kpi .lbl { font-size: 12px; color: var(--c-texto-suave); margin-top: 2px; }
+
+/* ---------- Accesos del panel ----------
+   Tarjetas grandes a cada sección, en el panel. Existen porque la barra de
+   navegación es chica en un teléfono y porque a un ayudante que ve tres
+   secciones el panel le tiene que mostrar SUS tres, no las siete. */
+.accesos {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.acceso {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--c-superficie);
+  border: 1px solid var(--c-borde);
+  border-radius: var(--radio);
+  padding: 16px 14px;
+  text-decoration: none;
+  color: var(--c-texto);
+  font-weight: 600;
+  font-size: 15px;
+}
+.acceso .material-icons { color: var(--c-primario); font-size: 26px; }
+.acceso:active { background: var(--c-fondo); }
 
 /* ---------- Formularios ---------- */
 label { display: block; font-size: 14px; font-weight: 600; margin: 12px 0 4px; }
