@@ -77,6 +77,18 @@ administradores están publicados, en `interno/utils.js` (mapa
 `ADMINS_INICIALES`) y en la documentación. Un uid sin contraseña no abre nada,
 pero son datos personales servidos públicamente.
 
+**De quién son las cuentas** (titular de la consola de Firebase, de Cloudinary,
+de Netlify): **no se documenta acá.** Vive solo en el repo privado
+`casaverdecanas-blip/datos` → `secretos/rematetaller.md`, sección "Titularidad de las
+cuentas". No es un secreto —la contraseña sí, y esa no está en ningún documento—
+pero es un dato de contacto, y este repositorio es público. Ver
+`PROTOCOLO-SECRETOS.md` § "Titularidad".
+
+**Ojo con una confusión fácil:** los dos mails con UID que publica la
+documentación (§ 4, mapa `ADMINS_INICIALES`) son **usuarios de Firebase Auth que
+entran al panel**, no el titular de la consola de Firebase. Son cosas distintas y
+de la primera no se deduce la segunda.
+
 Índice espejo y actualizado: repo privado `casaverdecanas-blip/datos` →
 `secretos/rematetaller.md`.
 
