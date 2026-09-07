@@ -66,7 +66,7 @@ tanda** que la primera función.
 | Contraseña de cada administrador | Login a `interno/login.html` | dato en runtime | Firebase Authentication. **No se comparten entre personas**: se entra por "Recuperar contraseña", que manda el mail de Firebase | `signInWithEmailAndPassword` en `utils.js` | leído del repo, 2026-09-07 |
 | `usuarios/{uid}` → `rol`, `activo`, `permisos` | Quién entra y qué puede hacer | dato en runtime | Firestore, protegido por las reglas publicadas en la consola | `configuracion.html`, `utils.js` | leído del repo, 2026-09-07 |
 | `llaves/{codigo}` | La llave del comprador **es la credencial** | dato en runtime | Firestore. El `get` por código está abierto a propósito; **listar llaves sin sesión está cerrado** — sería entregar todas las credenciales de una | `index.html`, `comprador.html`, `interno/llaves.html` | doc § 5.1, 2026-09-07 |
-| Reglas de Firestore | Autoridad real de acceso | configuración de seguridad | La autoridad es lo publicado en la **consola de Firebase**. ⚠️ La documentación declara un `/firestore.rules` en la raíz **que no existe en el repo** — pendiente | Firestore | ausencia confirmada, 2026-09-07 |
+| Reglas de Firestore | Autoridad real de acceso | configuración de seguridad (copia en repo, autoridad en consola) | La autoridad sigue siendo lo publicado en la **consola de Firebase**. La copia vive en `/firestore.rules` (raíz), **v0.6**, creada el 2026-09-07 con el texto real de la consola | Firestore | copiado de la consola por Mauro, 2026-09-07 |
 
 Lo que NO está acá y no tiene que estar: el `api_secret` de Cloudinary, las
 contraseñas de los administradores, y cualquier clave de terceros futura (esas

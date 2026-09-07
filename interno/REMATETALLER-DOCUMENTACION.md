@@ -395,13 +395,44 @@ queda inaccesible desde el cliente y falla a la vista, en la primera prueba. Ant
 el catch-all la dejaba abierta a cualquiera con sesión y el problema aparecía mucho después.
 El bloque se escribe en la misma entrega que el código que usa la colección.
 
-### 5.4 · Reglas vigentes (v0.4) — pegar completas en la consola
+### 5.4 · Reglas vigentes (v0.6) — pegar completas en la consola
 
-> Las **v0.3 quedaron verificadas**: estaban publicadas de verdad (§11.1 cerrada). La v0.4
-> se apoya en eso y cierra dos cosas que la v0.3 dejaba abiertas.
+> **Corrección del 2026-09-07.** Esta sección declaraba la **v0.4** como vigente cuando en
+> la consola estaban publicadas las **v0.6** (fechadas 7-ago-2026). Dos versiones enteras
+> —la v0.5 y la v0.6— nunca llegaron a este documento. Es el mismo error del §11.1 pero al
+> revés: aquella vez la consola estaba *atrás* de lo que el documento decía; esta vez estaba
+> *adelante*. La lección no cambia: **el documento no es autoridad sobre las reglas, la
+> consola lo es**, y la única forma de saber cuál de las dos está vieja es mirar.
 
-El archivo completo vive en `firestore.rules`, en la raíz del repositorio, y es la copia de
-lo que hay que pegar en la consola. Lo que cambia respecto de la v0.3:
+El archivo completo vive en `firestore.rules`, **en la raíz del repositorio**, y es la copia
+de lo que hay que pegar en la consola. Hasta el 2026-09-07 ese archivo se declaraba acá pero
+**no existía**: se creó copiando el texto real de la consola, no reconstruyéndolo desde esta
+descripción.
+
+**Lo que trae la v0.6 sobre la v0.5:**
+
+0. **Entra `documentos` (libretas de propiedad) con su bloque propio.** No es de lectura
+   pública, a diferencia del catálogo: tiene el nombre del titular —una persona ajena al
+   negocio— y los números de motor y chasis, que publicados sirven para clonar la identidad
+   de un vehículo. Solo con permiso `documentos`. **No se borran desde el cliente:** un
+   documento cargado es evidencia.
+
+**Lo que trajo la v0.5 sobre la v0.4:**
+
+1. **Los permisos se aplican en el servidor.** El catálogo vive en `utils.js` (`PERMISOS`) y
+   las reglas lo hacen valer: `inventario`, `cobros`, `entregas`, `llaves`, `validar`. Sin
+   esto, esconder botones es decoración.
+2. **El precio es de quien tasa.** Quien tiene `inventario` crea y edita artículos pero no
+   toca `precioSugerido`, `precioLote` ni `moneda`. Crea con el precio en `null`; quien
+   tiene `validar` lo tasa después desde la bandeja de pendientes.
+3. **La venta es inmutable de verdad.** Que `items` y `totales` no se tocaran lo cuidaba la
+   interfaz; ahora una actualización de venta solo puede afectar `pago` y `entrega`, y cada
+   uno pide su permiso — el que cobra no mueve entregas ni al revés.
+4. **El rol `admin` pasa por encima de todos los permisos**, y es el único que toca
+   usuarios, textos públicos y borrados.
+
+**Lo que trajo la v0.4 sobre la v0.3** (se conserva porque explica por qué el archivo es
+como es, §7.5):
 
 1. **Se eliminó el catch-all `match /{col}/{docId}`.** Rige el default deny (§5.3).
    Consecuencia inmediata: `metodosPago` necesitó su bloque propio, porque vivía del
@@ -446,13 +477,24 @@ autenticado. Lección directa de Casa Verde.
 Se actualiza en **toda** tanda que cree, borre o cambie un archivo. Un inventario
 desactualizado es peor que no tenerlo: da por existente lo que no está.
 
+> **Y esta regla se rompió, revisado el 2026-09-07.** Este inventario declaraba
+> `firestore.rules` 0.4 (el archivo no existía y lo publicado era 0.6), `utils.js` 1.6
+> (era 1.11) y `design-system.css` 1.0 (era 1.1), y **no listaba `documentos.html` ni
+> `prompt-libretas.md`**, dos archivos que sí estaban. Las filas verificables se
+> corrigieron leyendo los archivos. Las páginas de `interno/` no llevan sello en su
+> cabecera —solo `utils.js` y `design-system.css` lo tienen—, así que para el resto **no
+> hay contra qué verificar**: ese es el pendiente §12 de sellos visibles, y es la razón por
+> la que este inventario se puede desincronizar sin que nada avise.
+
 | Archivo | v | Qué es |
 |---|---|---|
 | `index.html` | 1.0 | Puerta pública: valida la llave (por link o a mano) y avisa por WhatsApp si no sirve |
-| `firestore.rules` | 0.4 | Copia de las reglas de la consola: default deny, `usuarios` cerrado, chequeo de `activo` |
+| `firestore.rules` | **0.6** | Copia de las reglas de la consola: default deny sin catch-all, `usuarios` cerrado, `activo` exigido, permisos aplicados en el servidor, venta inmutable y bloque de `documentos`. **Creado el 2026-09-07** copiando el texto real de la consola |
 | `comprador.html` | 2.3 | Catálogo (nombre + descripción, fotos ampliables), guía "¿Cómo comprar?", carrito, lote, propuesta, envío |
-| `interno/utils.js` | 1.6 | Núcleo: Firebase, auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, helpers |
-| `interno/design-system.css` | 1.0 | Estilos mobile-first |
+| `interno/utils.js` | **1.11** | Núcleo: Firebase, auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, helpers |
+| `interno/design-system.css` | **1.1** | Estilos mobile-first |
+| `interno/documentos.html` | — | Libretas de propiedad: alta, listado y consulta. Exige el permiso `documentos`. **Faltaba en este inventario** hasta el 2026-09-07 |
+| `interno/prompt-libretas.md` | — | Prompt de extracción de datos de una libreta a JSON. **Faltaba en este inventario** hasta el 2026-09-07 |
 | `interno/login.html` | 1.0 | Login admin |
 | `interno/index.html` | 1.0 | Router/portero del panel |
 | `interno/panel.html` | 1.1 | Dashboard con KPIs, tarjeta "El circuito completo", ayuda con la visión general |
@@ -957,6 +999,15 @@ el sistema por andando.
 > **Entrega:** `firestore.rules` (nuevo archivo en la raíz) + esta edición del documento.
 > **Acción manual: pegar las reglas completas en la consola.** Sin eso, esta tanda no
 > existe.
+>
+> ⚠️ **Corrección del 2026-09-07 — este registro decía algo que no pasó.** La mitad manual
+> se hizo (las reglas se publicaron, y siguieron evolucionando hasta la v0.6). **El archivo
+> nunca se subió al repositorio**: se declaró entregado acá, en el inventario §6 y en el
+> mapa §2.1, y no existía. Se detectó al querer comparar lo publicado contra la copia y no
+> encontrar copia. Es exactamente lo que §7.4 prohíbe —no se registra como entregado nada
+> que no se haya entregado— y no se borra porque explica cómo se llega a creer que algo está
+> hecho durante un mes. El archivo se creó el 2026-09-07 copiando el texto real de la
+> consola, nunca reconstruyéndolo desde esta descripción.
 >
 > **Se cerró la verificación más vieja del proyecto.** Las v0.3 estaban publicadas de
 > verdad. El registro decía la verdad; lo que faltaba era mirar. Queda como lección al
