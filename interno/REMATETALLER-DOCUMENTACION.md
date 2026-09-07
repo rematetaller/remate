@@ -1,6 +1,12 @@
 # REMATE TALLER — Documentación del sistema
 
-**Edición del 7 de agosto de 2026 · v0.5.5**
+**Edición del 7 de septiembre de 2026 · v0.5.12**
+
+> La cabecera decía *"7 de agosto · v0.5.5"* mientras el registro llegaba a la Tanda 19 y
+> el código a `utils.js` v1.11. **Un documento que se presenta con la fecha de hace un mes
+> avisa mal desde el primer renglón**: quien lo abre asume que lo que falta es de un mes,
+> no de un día. La fecha y la versión de acá arriba se suben en la misma tanda que el
+> registro, como el resto (§8.4).
 
 Documento único del proyecto: el reglamento técnico, la historia de cada tanda y la
 guía de la parte pública, todo en un archivo. **Reemplaza a
@@ -958,6 +964,139 @@ el sistema por andando.
 > (`v0.5.1` → `v0.5.2`). Las correcciones dentro de una misma tanda llevan sufijo.
 
 ---
+
+---
+
+> ### ⚠️ Las siete entradas que siguen se reconstruyeron el 2026-09-07
+>
+> **El registro estuvo detenido un mes.** La última entrada era la Tanda 12 (7-ago) y el
+> código iba por la Tanda 19: entre medio, el changelog se mudó solo a la cabecera de
+> `interno/utils.js`, que pasó a hacer de registro paralelo. Es lo que §7.2 evita, y no
+> quedó ahí — mientras el registro estuvo parado, el inventario §6 derivó (decía `utils.js`
+> 1.6 cuando iba por 1.11), las reglas quedaron dos versiones atrás de la consola, y la
+> Tanda 11 declaró **entregado** un `firestore.rules` que nunca existió. **No fueron cuatro
+> problemas: fue uno.**
+>
+> **Qué es registro y qué es reconstrucción**, para que nadie lea esto como si fuera igual
+> de firme que lo de abajo:
+>
+> - **Es registro:** el texto de los cambios (sale de la cabecera de `utils.js`, escrita en
+>   su momento), las fechas y los archivos de cada entrega (salen de los commits).
+> - **Es reconstrucción:** la correspondencia entre cada tanda y su entrega, deducida por
+>   orden cronológico y por contenido; y los números de versión del documento, asignados
+>   ahora continuando la convención de arriba, porque las tandas originales no los
+>   escribieron.
+> - **Las tandas 14 y 18 no dejaron rastro en la cabecera de `utils.js`** porque no tocaron
+>   el núcleo. Se reconstruyeron leyendo el cambio real de sus archivos. Son las que más
+>   inferencia tienen.
+>
+> **La lección, que vale más que las siete entradas:** un registro no se detiene con un
+> aviso. Se detiene en silencio, y lo que se rompe después no parece tener nada que ver.
+
+---
+
+## v0.5.12 — La tolerancia de la búsqueda escala con el largo (Tanda 19 · 15-ago-2026)
+
+> **Entrega:** `interno/utils.js` v1.11.
+
+La tolerancia de la búsqueda difusa era **2 fija**. En un chasis de 17 caracteres eso es un
+match muy bueno; en un padrón de 4 significa que la mitad del número es distinta. Con eso,
+buscar `1423` devolvía el padrón `1.622` como coincidencia. Ahora la tolerancia **escala con
+el largo del identificador**.
+
+---
+
+## v0.5.11 — Corregir un documento ya cargado (Tanda 18 · 15-ago-2026)
+
+> **Entrega:** `interno/documentos.html`. **No tocó el núcleo** — de ahí que no figure en la
+> cabecera de `utils.js`.
+
+- **"Corregir este documento"** en cada resultado de la búsqueda: lo abre en la pestaña
+  Cargar con todo lo que tiene, para arreglar un número mal leído, sumar la ubicación o
+  agregar otra foto.
+- **Se sobrescribe el mismo registro, no se crea uno nuevo.** Queda anotado quién lo editó y
+  cuándo, sin perder la fecha de la carga original — §3.6: una escritura del sistema no
+  borra el trabajo de una persona.
+- Si se corrige justo el número que identifica al documento, **el registro conserva su
+  identificador interno**; la búsqueda usa los números corregidos, así que lo encuentra igual.
+- **No se borran documentos: se corrigen.** Borrar es solo del administrador y desde la
+  consola.
+- La ayuda `?` de la pantalla se actualizó en la misma entrega (§8.6).
+
+---
+
+## v0.5.10 — Las libretas viejas dicen "no hay número" de varias maneras (Tanda 17 · 15-ago-2026)
+
+> **Entrega:** `interno/utils.js` v1.10 + `interno/documentos.html`.
+
+- **`esSinDato()`**: reconoce los `X`, `S/N`, `-` con que las libretas viejas dicen que un
+  número **no existe**. Antes se guardaban como si fueran el número, y **dos libretas sin
+  chasis compartían el mismo id** — un derivado falso, §3.5.
+- **La coincidencia parcial arranca en 3 caracteres, no en 4:** buscar `KMQ` tiene que
+  encontrar la matrícula `KMQ 607`.
+
+---
+
+## v0.5.9 — Los accesos directos del panel salen de una sola lista (Tanda 16 · 15-ago-2026)
+
+> **Entrega:** `interno/utils.js` v1.9 + `interno/panel.html` + `interno/design-system.css` v1.1.
+
+**`seccionesDisponibles()`**: la lista de secciones que esta persona puede abrir, sacada del
+**mismo `NAV_ITEMS`** que pinta la barra. El panel la usa para sus accesos directos: **una
+sola fuente, así no hay dos listas que se desincronicen** (§3.5).
+
+---
+
+## v0.5.8 — Documentos: las libretas de propiedad (Tanda 15 · 15-ago-2026)
+
+> **Entrega:** `interno/utils.js` v1.8 + `interno/documentos.html` (nuevo) +
+> `interno/prompt-libretas.md` (nuevo).
+> **Acción manual pendiente en su momento: publicar el bloque `documentos` de las reglas.**
+> Está en las v0.6 publicadas (§5.4).
+
+- **Permiso `documentos`** y su ítem de navegación.
+- **Búsqueda por aproximación de identificadores** (motor, chasis, matrícula):
+  `canonizar()`, `plegar()` y `buscarIdentificador()`. Viven en el núcleo porque los van a
+  usar dos pantallas: `documentos.html` y, cuando exista, el cruce contra las motos del
+  inventario (§3.2).
+
+> **Corrección v1.8.1 dentro de la misma tanda:** `renderNav` armaba la fila del avatar pero
+> **no inyectaba su CSS** — solo lo hacía `mostrarCuenta`, o sea recién *después* de tocarlo.
+> Resultado: un botón sin estilo, cuadrado, apilado debajo de la marca. **Los estilos de un
+> componente se inyectan cuando se pinta, no cuando se usa.**
+
+---
+
+## v0.5.7 — La pantalla de usuarios se pone a la altura del catálogo (Tanda 14 · 14-ago-2026)
+
+> **Entrega:** `interno/configuracion.html`. **No tocó el núcleo** — de ahí que no figure en
+> la cabecera de `utils.js`.
+
+Es la contracara de la tanda 13: aquella puso el catálogo `PERMISOS` en el núcleo, ésta hizo
+la pantalla que lo usa.
+
+- **Chips de permisos tildables uno por uno**, cada uno con su detalle escrito en castellano
+  debajo — el límite del permiso se dice, no se deduce.
+- **Presets de alta**, para que dar de alta a alguien sea un toque y no cinco.
+- **"Usuarios administradores" pasa a llamarse "Usuarios del panel"**: desde la tanda 13 ya
+  no son todos administradores, y el título viejo decía lo contrario de lo que pasa.
+- Los estilos de los chips van **en la pantalla y no en `design-system.css`**: son de esta
+  pantalla. Los globales del núcleo los inyecta `utils.js` (§7.7).
+
+---
+
+## v0.5.6 — El catálogo de permisos entra al núcleo (Tanda 13 · 8-ago-2026)
+
+> **Entrega:** `interno/utils.js` v1.7 + esta edición del documento. En la misma sesión entró
+> también `interno/prompt-libretas.md`.
+
+- **`PERMISOS`: catálogo único**, con `puede()`, `esAdmin()`, los presets de alta y la
+  navegación filtrada. **El catálogo vive en el núcleo y solo ahí**: lo leen la navegación,
+  el editor de usuarios y las reglas de Firestore — que son las que de verdad los aplican.
+  Un permiso que está en el catálogo pero no en las reglas **es decoración**: la interfaz
+  esconde botones, el servidor es el que dice que no.
+- **`crearCuentaAuth()`**: crea la cuenta de Auth desde el panel con una **instancia
+  secundaria** de Firebase, para no perder la sesión propia.
 
 ## v0.5.5 — Salir del panel de verdad (Tanda 12 · 7-ago-2026)
 
