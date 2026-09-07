@@ -9,6 +9,17 @@ HTML/CSS/JS servido tal cual, módulos ES por CDN, sin build, sin npm, sin
 **No hay funciones de servidor** y no hay workflows propios (no existe carpeta
 `.github/`).
 
+> **Y no es un descuido, es una decisión.** El 2026-09-07 se agregó un
+> `.github/workflows/main.yml` con `anthropics/claude-code-action`, para intentar
+> destrabar un push que fallaba con 403. No sirvió para eso —el bloqueo era otro,
+> ver `PROTOCOLO-GENERAL.md` § 4.1 en el repo `datos`— y además el archivo estaba
+> mal: sin indentación (YAML inválido) y con `${ }` en vez de `${{ }}`. Corrió una
+> sola vez y falló. Se retiró el mismo día. Si alguna vez se quiere mencionar a
+> `@claude` en issues y PRs, se agrega a propósito y **en la misma tanda** se
+> corrige esto, la tabla de secretos de abajo y `datos/secretos/rematetaller.md`:
+> requiere cargar un `ANTHROPIC_API_KEY` como GitHub Secret —lo carga Mauro a
+> mano, nunca un chat— y sería el primer secreto de Actions del proyecto.
+
 Terceros: **Firebase** (Auth + Firestore, proyecto `remate-acbc9`) y
 **Cloudinary**, accedidos directo desde el navegador. La seguridad la aplican
 las Security Rules de Firestore, no la interfaz.
