@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diagnóstico — remateTaller</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+<link rel="stylesheet" href="design-system.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#b45309">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+/* De esta pantalla. Los globales del núcleo los inyecta utils.js. */
+.dg-grupo { margin: 18px 0 6px; font-size: .82rem; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--c-texto-suave, #666); font-weight: 700; }
+.dg-fila { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px;
+  border: 1px solid var(--c-borde, #ddd); border-radius: var(--radio, 10px);
+  background: var(--c-superficie, #fff); margin-bottom: 8px; }
+.dg-ico { font-size: 1.1rem; line-height: 1.35; flex: none; width: 1.4em; text-align: center; }
+.dg-txt { flex: 1; min-width: 0; }
+.dg-nom { font-weight: 600; font-size: .95rem; }
+.dg-sub { font-size: .82rem; color: var(--c-texto-suave, #666); margin-top: 2px;
+  overflow-wrap: anywhere; }
+.dg-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; }
+.dg-log { width: 100%; min-height: 190px; font-family: ui-monospace, monospace;
+  font-size: 12px; line-height: 1.45; border: 1px solid var(--c-borde, #ddd);
+  border-radius: var(--radio, 10px); padding: 10px; background: var(--c-fondo, #f4f4f2);
+  color: var(--c-texto, #222); white-space: pre; overflow: auto; }
+.dg-peligro { border-color: var(--c-aviso, #b45309); background: #fff8ef; }
+.dg-peligro .dg-nom { color: var(--c-aviso, #b45309); }
+</style>
+</head>
+<body>
+
+<header id="topbar"></header>
+
+<main>
+  <h1>Diagnóstico</h1>
+
+  <div class="dg-acciones">
+    <button class="btn" id="btnProbar">Probar todo</button>
+    <button class="btn secundario" id="btnCopiar">Copiar el informe</button>
+  </div>
+
+  <div id="salida"></div>
+
+  <div class="dg-grupo">Informe para pegar en el chat</div>
+  <textarea class="dg-log" id="log" readonly
+    aria-label="Informe de diagnóstico">Tocá «Probar todo».</textarea>
+
+  <div class="dg-grupo">Prueba que hay que pedir aparte</div>
+  <div class="dg-fila dg-peligro">
+    <span class="dg-ico">⚠️</span>
+    <div class="dg-txt">
+      <div class="dg-nom">Desactivarte a vos mismo</div>
+      <div class="dg-sub">
+        Intenta poner tu propia ficha en <code>activo: false</code>. Las reglas
+        tienen que <strong>negarlo</strong>: esa negativa es la prueba de que están
+        publicadas. <strong>No se pierde ningún dato</strong> — si por un error de
+        las reglas la escritura pasara, la página la revierte en el acto y te avisa
+        en rojo. Va aparte porque es la única prueba que intenta escribir sobre tu
+        propia cuenta.
+      </div>
+      <div class="dg-acciones">
+        <button class="btn secundario" id="btnReglaViva">Probar la regla</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+import {
+  verificarAuth, renderNav, iniciarAyuda, db, usuario, puede, esAdmin,
+  PERMISOS, CLOUDINARY, toast, doc, getDoc, setDoc, updateDoc, collection, getDocs
+} from "./utils.js";
+
+const $ = (id) => document.getElementById(id);
+let lineas = [];
+
+function log(t) { lineas.push(t); $("log").value = lineas.join("\n"); }
+
+function fila(estado, nombre, detalle) {
+  const ico = { ok: "✅", ojo: "⚠️", mal: "❌" }[estado] || "·";
+  const d = document.createElement("div");
+  d.className = "dg-fila";
+  d.innerHTML =
+    '<span class="dg-ico"></span><div class="dg-txt">' +
+    '<div class="dg-nom"></div><div class="dg-sub"></div></div>';
+  d.querySelector(".dg-ico").textContent = ico;
+  d.querySelector(".dg-nom").textContent = nombre;
+  d.querySelector(".dg-sub").textContent = detalle || "";
+  $("salida").appendChild(d);
+  log(ico + " " + nombre + (detalle ? " — " + detalle : ""));
+}
+
+function grupo(t) {
+  const d = document.createElement("div");
+  d.className = "dg-grupo";
+  d.textContent = t;
+  $("salida").appendChild(d);
+  log("\n=== " + t.toUpperCase() + " ===");
+}
+
+// Sin red, una lectura de Firestore no falla: espera para siempre. Sin plazo la
+// sección quedaba en blanco y parecía que el botón no hacía nada. [casaverdecanas]
+function conPlazo(promesa, ms) {
+  return Promise.race([
+    promesa,
+    new Promise((_, rechazar) =>
+      setTimeout(() => rechazar(Object.assign(new Error("sin respuesta"), { code: "plazo" })), ms))
+  ]);
+}
+
+const motivo = (e) => {
+  const c = (e && e.code) || "error";
+  if (c === "permission-denied") return "las reglas no lo permiten con este usuario";
+  if (c === "plazo") return "Firestore no contestó en 8s: no es un permiso, no se llega al servidor";
+  if (c === "unavailable") return "sin conexión con Firestore";
+  return c + (e && e.message ? " · " + e.message : "");
+};
+
+// ── 1 · Navegador y app ────────────────────────────────────────
+async function navegador() {
+  grupo("Navegador y app");
+  fila(navigator.onLine ? "ok" : "mal", "Conexión",
+    navigator.onLine ? "el navegador se ve en línea" : "sin conexión: el resto va a fallar");
+
+  const instalada = matchMedia("(display-mode: standalone)").matches;
+  fila("ok", "Modo", instalada ? "app instalada (standalone)" : "pestaña del navegador");
+
+  try {
+    const rs = await navigator.serviceWorker.getRegistrations();
+    if (!rs.length) fila("ojo", "Service worker", "ninguno registrado: la app no está instalable");
+    else rs.forEach((r) => {
+      const est = r.active ? "activo" : r.installing ? "instalándose" : "en espera";
+      fila("ok", "Service worker", est + " · alcance " + r.scope);
+    });
+  } catch (e) { fila("mal", "Service worker", e.message); }
+
+  try {
+    const k = await caches.keys();
+    fila(k.length ? "ok" : "ojo", "Cachés", k.length ? k.join(", ") : "ninguna todavía");
+  } catch (e) { fila("ojo", "Cachés", "no se pueden leer: " + e.message); }
+}
+
+// ── 2 · Archivos y sellos ──────────────────────────────────────
+const ARCHIVOS = [
+  "utils.js", "design-system.css", "sw.js", "manifest.webmanifest",
+  "panel.html", "inventario.html", "pedidos.html", "ventas.html",
+  "llaves.html", "documentos.html", "configuracion.html", "login.html"
+];
+
+async function archivos() {
+  grupo("Archivos en el servidor");
+  for (const f of ARCHIVOS) {
+    try {
+      const r = await fetch(f + "?d=" + Date.now(), { cache: "no-store" });
+      if (!r.ok) { fila("mal", f, "HTTP " + r.status); continue; }
+      const t = await r.text();
+      const kb = Math.round(t.length / 1024);
+      let sello = "";
+      const m = t.match(/(?:utils\.js[^\n]*?|Sistema de dise[^\n]*?)\(v([0-9.]+)\)/)
+             || t.match(/v([0-9]+\.[0-9]+)/);
+      if ((f === "utils.js" || f === "design-system.css") && m) sello = " · sello v" + m[1];
+      fila("ok", f, kb + " KB" + sello);
+    } catch (e) { fila("mal", f, "no se pudo pedir: " + e.message); }
+  }
+}
+
+// ── 3 · Sesión y permisos ──────────────────────────────────────
+async function sesion() {
+  grupo("Sesión y permisos");
+  const u = usuario();
+  if (!u) { fila("mal", "Sesión", "no hay usuario: verificarAuth debería haber redirigido"); return; }
+  fila("ok", "Quién sos", (u.nombre || "(sin nombre)") + " · " + (u.email || "") + " · uid " + u.uid);
+  fila(u.activo === false ? "mal" : "ok", "Tu ficha en usuarios/",
+    "activo: " + u.activo + " · rol: " + (u.rol || "(sin rol)"));
+  const tiene = PERMISOS.filter((p) => puede(p.id)).map((p) => p.id);
+  fila("ok", "Permisos que resuelve puede()",
+    (esAdmin() ? "sos admin: podés todo · " : "") + (tiene.length ? tiene.join(", ") : "ninguno"));
+}
+
+// ── 4 · Lectura de cada colección ──────────────────────────────
+const COLECCIONES = [
+  { c: "categorias", nota: "lectura pública" },
+  { c: "productos", nota: "lectura pública" },
+  { c: "llaves", nota: "listar exige sesión activa" },
+  { c: "pedidos", nota: "listar exige sesión activa" },
+  { c: "ventas", nota: "exige sesión activa" },
+  { c: "metodosPago", nota: "exige sesión activa" },
+  { c: "documentos", nota: "exige el permiso documentos" },
+  { c: "usuarios", nota: "listar es solo de admin", soloAdmin: true }
+];
+
+async function lecturas() {
+  grupo("Lectura de cada colección");
+  for (const it of COLECCIONES) {
+    try {
+      const s = await conPlazo(getDocs(collection(db, it.c)), 8000);
+      fila("ok", it.c, s.size + " documento(s) · " + it.nota);
+    } catch (e) {
+      // Que a un no-admin le nieguen `usuarios` es el comportamiento correcto,
+      // no una falla: la regla está haciendo su trabajo.
+      const esperado = it.soloAdmin && !esAdmin() && (e && e.code) === "permission-denied";
+      fila(esperado ? "ok" : "mal", it.c + " — " + it.nota,
+        esperado ? "denegado, como corresponde a quien no es admin" : motivo(e));
+    }
+  }
+  try {
+    const s = await conPlazo(getDoc(doc(db, "config", "publico")), 8000);
+    fila(s.exists() ? "ok" : "ojo", "config/publico",
+      s.exists() ? "existe · lectura pública" : "no existe todavía");
+  } catch (e) { fila("mal", "config/publico", motivo(e)); }
+}
+
+// ── 5 · Que las reglas estén vivas ─────────────────────────────
+// Acá lo que se busca es el ERROR. Una negativa es la prueba de que la regla
+// está publicada; que pase es el problema (§4.8 de PROTOCOLO-DESARROLLO).
+async function reglasVivas() {
+  grupo("Que las reglas estén vivas");
+  log("(acá lo bueno es que FALLE: cada negativa prueba que esa regla está publicada)");
+
+  try {
+    await conPlazo(getDoc(doc(db, "config", "integraciones")), 8000);
+    fila("mal", "Deny por defecto — leer config/integraciones",
+      "SE PUDO LEER. config/ no debería tener más bloque que `publico`: hay un catch-all.");
+  } catch (e) {
+    const c = (e && e.code) || "";
+    fila(c === "permission-denied" ? "ok" : "ojo",
+      "Deny por defecto — leer config/integraciones",
+      c === "permission-denied" ? "denegado, como corresponde" : motivo(e));
+  }
+
+  try {
+    await conPlazo(getDocs(collection(db, "_diagnostico_sin_regla")), 8000);
+    fila("mal", "Deny por defecto — colección sin bloque",
+      "SE PUDO LEER una colección que no tiene regla: hay un catch-all abierto.");
+  } catch (e) {
+    const c = (e && e.code) || "";
+    fila(c === "permission-denied" ? "ok" : "ojo", "Deny por defecto — colección sin bloque",
+      c === "permission-denied" ? "denegado, como corresponde" : motivo(e));
+  }
+
+  try {
+    await conPlazo(setDoc(doc(db, "_diagnostico_sin_regla", "prueba"), { t: Date.now() }), 8000);
+    fila("mal", "Deny por defecto — escribir sin bloque",
+      "SE PUDO ESCRIBIR en _diagnostico_sin_regla/prueba. Borrá ese documento desde la consola y revisá las reglas.");
+  } catch (e) {
+    const c = (e && e.code) || "";
+    fila(c === "permission-denied" ? "ok" : "ojo", "Deny por defecto — escribir sin bloque",
+      c === "permission-denied" ? "denegado, como corresponde" : motivo(e));
+  }
+}
+
+// La prueba del §4.8, aparte y a pedido.
+async function reglaDeUnoMismo() {
+  grupo("Desactivarte a vos mismo");
+  const u = usuario();
+  if (!u) { fila("mal", "Sin sesión", "no se puede probar"); return; }
+  try {
+    await conPlazo(updateDoc(doc(db, "usuarios", u.uid), { activo: false }), 8000);
+    fila("mal", "Desactivarte a vos mismo",
+      "LA ESCRITURA PASÓ. Las reglas publicadas no son las v0.4 o posteriores. Revirtiendo…");
+    try {
+      await updateDoc(doc(db, "usuarios", u.uid), { activo: true });
+      fila("ojo", "Revertido", "tu cuenta volvió a activo: true. Publicá las reglas ya.");
+    } catch (e2) {
+      fila("mal", "NO SE PUDO REVERTIR",
+        "poné activo: true a mano en la consola de Firebase, en usuarios/" + u.uid);
+    }
+  } catch (e) {
+    const c = (e && e.code) || "";
+    fila(c === "permission-denied" ? "ok" : "ojo", "Desactivarte a vos mismo",
+      c === "permission-denied"
+        ? "denegado: la regla está publicada y viva. Es el resultado que se busca."
+        : motivo(e));
+  }
+}
+
+// ── 6 · Cloudinary ─────────────────────────────────────────────
+async function cloudinary() {
+  grupo("Cloudinary");
+  fila("ok", "Configuración", "cloud " + CLOUDINARY.cloud + " · preset " + CLOUDINARY.preset);
+  try {
+    await fetch("https://res.cloudinary.com/" + CLOUDINARY.cloud + "/image/upload/_diagnostico.jpg",
+      { method: "GET", mode: "no-cors", cache: "no-store" });
+    fila("ok", "El CDN de entrega responde", "se llega a res.cloudinary.com");
+  } catch (e) {
+    fila("mal", "El CDN de entrega no responde", "las fotos no se van a ver: " + e.message);
+  }
+}
+
+async function probarTodo() {
+  const b = $("btnProbar");
+  b.disabled = true; b.textContent = "Probando…";
+  $("salida").innerHTML = ""; lineas = [];
+  log("remateTaller · diagnóstico · " + new Date().toISOString());
+  log("url: " + location.href);
+  try {
+    await navegador();
+    await archivos();
+    await sesion();
+    await lecturas();
+    await reglasVivas();
+    await cloudinary();
+    log("\n— fin —");
+  } catch (e) {
+    fila("mal", "El diagnóstico se cortó", e.message);
+  }
+  b.disabled = false; b.textContent = "Probar de nuevo";
+}
+
+verificarAuth(() => {
+  renderNav(null);   // no tiene ítem propio: se abre escribiendo la dirección
+  iniciarAyuda("Qué hace esta pantalla", `
+<p>Prueba, una por una, <strong>las conexiones reales</strong> del panel: el navegador
+y la app instalada, los archivos que sirve el servidor, tu sesión y tus permisos, la
+lectura de cada colección, que las reglas de Firestore estén publicadas, y Cloudinary.</p>
+<h3>Cómo se lee</h3>
+<ul>
+<li><strong>✅</strong> funciona.</li>
+<li><strong>⚠️</strong> no falla, pero no es lo esperado.</li>
+<li><strong>❌</strong> está roto, o —en las pruebas de reglas— <em>pasó algo que debería
+haber sido denegado</em>.</li>
+</ul>
+<h3>Las pruebas de reglas son al revés</h3>
+<p>En «Que las reglas estén vivas» lo bueno es que <strong>falle</strong>. Cada negativa
+es la prueba de que esa regla está publicada en la consola. Si alguna pasa, las reglas
+que están corriendo no son las que creés.</p>
+<h3>El informe</h3>
+<p>«Copiar el informe» copia todo en texto, para pegarlo en el chat. No lleva ninguna
+contraseña ni clave: solo identificadores públicos y resultados.</p>`);
+  probarTodo();
+});
+
+$("btnProbar").addEventListener("click", probarTodo);
+$("btnReglaViva").addEventListener("click", async (ev) => {
+  ev.target.disabled = true;
+  await reglaDeUnoMismo();
+  ev.target.disabled = false;
+});
+$("btnCopiar").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("log").value);
+    toast("Informe copiado.", "ok");
+  } catch (e) {
+    // Sin permiso de portapapeles (pasa en algunas vistas): que lo copie a mano.
+    $("log").focus(); $("log").select();
+    toast("Seleccionado: copialo a mano.", "aviso");
+  }
+});
+</script>
+</body>
+</html>

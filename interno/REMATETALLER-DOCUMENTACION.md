@@ -1,6 +1,6 @@
 # REMATE TALLER — Documentación del sistema
 
-**Edición del 7 de septiembre de 2026 · v0.5.12**
+**Edición del 8 de septiembre de 2026 · v0.5.13**
 
 > La cabecera decía *"7 de agosto · v0.5.5"* mientras el registro llegaba a la Tanda 19 y
 > el código a `utils.js` v1.11. **Un documento que se presenta con la fecha de hace un mes
@@ -500,6 +500,7 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | `interno/utils.js` | **1.11** | Núcleo: Firebase, auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, helpers |
 | `interno/design-system.css` | **1.1** | Estilos mobile-first |
 | `interno/documentos.html` | — | Libretas de propiedad: alta, listado y consulta. Exige el permiso `documentos`. **Faltaba en este inventario** hasta el 2026-09-07 |
+| `interno/diagnostico.html` | 1.0 | Prueba las conexiones reales del panel y **que las reglas estén publicadas**. Sin ítem en la barra: se abre escribiendo la dirección |
 | `interno/prompt-libretas.md` | — | Prompt de extracción de datos de una libreta a JSON. **Faltaba en este inventario** hasta el 2026-09-07 |
 | `interno/login.html` | 1.0 | Login admin |
 | `interno/index.html` | 1.0 | Router/portero del panel |
@@ -875,6 +876,12 @@ el sistema por andando.
    de pegarlas, probar en este orden: abrir el panel (si la ficha de usuario no se lee, no
    entra nadie), **agregar un método de pago en Ventas** —es la colección que vivía del
    catch-all—, cargar un producto, y abrir el catálogo con una llave en otro navegador.
+   ⚠ **Al 2026-09-08 lo publicado son las v0.6**, no las v0.4 (§5.4): dos versiones más
+   adelante de lo que este documento declaraba. **Buena parte de esta verificación ya la
+   hace sola `interno/diagnostico.html`** (Tanda 20): lee cada colección y comprueba que
+   las escrituras que las reglas deben negar efectivamente se nieguen, incluida la de
+   desactivarte a vos mismo. Lo que la página no puede hacer es el circuito con una llave
+   en otro navegador.
 2. ✅ **Preset de Cloudinary `preset-remate`** (unsigned) — creado y verificado, la carga
    de fotos funciona.
 3. **Prueba de circuito completo v0.5**, en este orden: crear un producto con nombre +
@@ -895,6 +902,15 @@ el sistema por andando.
 
 ## 12. PENDIENTES
 
+0. **El `sw.js` no tiene un contador que nadie pueda saltear.** Su `CACHE_NAME` es
+   `"ratetaller-cache-v1"` —clavado en `v1` desde que existe, y de paso mal escrito: le
+   falta la «me»—. En Casa Verde y CasaYourte lo que hace incontorneable a la `VERSION` es
+   la lista `SHELL` con su `addAll`, que es todo o nada: sin subirla la entrega no llega.
+   Acá el service worker cachea al vuelo, así que no obliga a nada. **Esa es la razón de
+   fondo por la que el registro de este proyecto se detuvo un mes sin que nadie lo
+   notara** (§8.1 del protocolo común). No es motivo para inventarle una `SHELL` que no
+   necesita: es motivo para saber que acá el registro al día es el único contador que
+   queda. **Decisión abierta, y toca una PWA en vivo.**
 1. **Notificaciones** — avisar a los dos administradores cuando un comprador envía un
    pedido o una oferta. EmailJS (resumen) + CallMeBot (WhatsApp) vía Netlify, reutilizando
    lo de Casa Verde. **Decisión abierta:** compartir el proyecto Netlify de Casa Verde o
@@ -992,6 +1008,57 @@ el sistema por andando.
 >
 > **La lección, que vale más que las siete entradas:** un registro no se detiene con un
 > aviso. Se detiene en silencio, y lo que se rompe después no parece tener nada que ver.
+
+---
+
+## v0.5.13 — Una pantalla que prueba las conexiones (Tanda 20 · 8-sep-2026)
+
+> **Entrega:** `interno/diagnostico.html` (nuevo) + esta edición del documento.
+> **Sin acción manual pendiente.** No toca el núcleo, ni las reglas, ni la barra de
+> navegación.
+
+Los otros dos sitios del ecosistema ya tenían su pantalla de diagnóstico y este no. Se
+suma siguiendo el patrón de los dos (§2.13 del protocolo común: repetir antes que
+inventar), combinando lo mejor de cada uno: **el checklist ✅/⚠️/❌ de CasaYourte** para
+leerlo de un vistazo en el teléfono, y **el informe de texto copiable de Casa Verde** para
+poder pegarlo en un chat.
+
+Prueba seis cosas, que son las conexiones reales del panel:
+
+1. **Navegador y app** — conexión, si corre instalada o en pestaña, el service worker y su
+   alcance, y qué cachés hay.
+2. **Archivos en el servidor** — que cada archivo del panel responda, su tamaño, y el sello
+   real de `utils.js` y `design-system.css`, que son los dos únicos que lo llevan escrito.
+3. **Sesión y permisos** — quién sos, tu ficha de `usuarios/`, tu `activo` y tu `rol`, y
+   qué permisos resuelve `puede()` de verdad.
+4. **Lectura de cada colección** — con plazo de 8 segundos, porque **sin red una lectura de
+   Firestore no falla: espera para siempre**, y sin el plazo la pantalla quedaba en blanco
+   como si el botón no anduviera (lección tomada de Casa Verde).
+5. **Que las reglas estén vivas** — ver abajo.
+6. **Cloudinary** — la configuración y que el CDN de entrega responda.
+
+> **La sección 5 se lee al revés que las otras, y es el punto de la pantalla.** Ahí lo que
+> se busca es que **falle**: intenta leer `config/integraciones`, leer y escribir una
+> colección sin bloque propio, y —en un botón aparte— desactivarte a vos mismo. **Cada
+> negativa es la prueba de que esa regla está publicada.** Si alguna pasa, las reglas que
+> están corriendo no son las que se creen (§5.4, y §4.8 del protocolo común).
+>
+> La prueba de desactivarte a vos mismo va **en su propio botón, con su aviso**, porque es
+> la única que intenta escribir sobre tu propia cuenta. El aviso dice qué hace y qué no se
+> pierde (§7.3 de `PROTOCOLO-INTERFAZ.md`), y si por un error de las reglas la escritura
+> pasara, la página la revierte en el acto y lo dice en rojo — y si tampoco pudiera
+> revertir, te da el uid para arreglarlo a mano en la consola.
+
+**Por qué no tiene ítem en la barra:** no es una parte de la aplicación, es una
+herramienta. Se abre escribiendo la dirección, igual que la de Casa Verde. Así no le come
+un lugar a la barra, que es exactamente el problema que este proyecto ya pagó dos veces
+(§0.2 de `PROTOCOLO-INTERFAZ.md`).
+
+**El número de tanda salió del registro, no del `sw.js`.** El § 8.1 del protocolo común
+dice que sale de la `VERSION` del service worker, que es el único contador que nadie puede
+saltear — pero el `sw.js` de este proyecto no tiene ninguno: su `CACHE_NAME` está clavado
+en `v1` desde que existe. Así que se aplicó el camino de repuesto: la última tanda
+registrada más uno. Queda anotado como pendiente en §12.
 
 ---
 
