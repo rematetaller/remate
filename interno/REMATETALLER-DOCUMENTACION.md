@@ -1,6 +1,6 @@
 # REMATE TALLER — Documentación del sistema
 
-**Edición del 8 de septiembre de 2026 · v0.5.13**
+**Edición del 8 de septiembre de 2026 · v0.5.14**
 
 > La cabecera decía *"7 de agosto · v0.5.5"* mientras el registro llegaba a la Tanda 19 y
 > el código a `utils.js` v1.11. **Un documento que se presenta con la fecha de hace un mes
@@ -500,7 +500,7 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | `interno/utils.js` | **1.11** | Núcleo: Firebase, auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, helpers |
 | `interno/design-system.css` | **1.1** | Estilos mobile-first |
 | `interno/documentos.html` | — | Libretas de propiedad: alta, listado y consulta. Exige el permiso `documentos`. **Faltaba en este inventario** hasta el 2026-09-07 |
-| `interno/diagnostico.html` | 1.0 | Prueba las conexiones reales del panel y **que las reglas estén publicadas**. Sin ítem en la barra: se abre escribiendo la dirección |
+| `interno/diagnostico.html` | **2.0** | Prueba las conexiones reales del panel y **que las reglas estén publicadas**. Sin ítem en la barra y **sin depender del núcleo**: se abre escribiendo la dirección y carga aunque `utils.js` esté roto |
 | `interno/prompt-libretas.md` | — | Prompt de extracción de datos de una libreta a JSON. **Faltaba en este inventario** hasta el 2026-09-07 |
 | `interno/login.html` | 1.0 | Login admin |
 | `interno/index.html` | 1.0 | Router/portero del panel |
@@ -1021,6 +1021,51 @@ el sistema por andando.
 >
 > **La lección, que vale más que las siete entradas:** un registro no se detiene con un
 > aviso. Se detiene en silencio, y lo que se rompe después no parece tener nada que ver.
+
+---
+
+## v0.5.14 — El diagnóstico deja de depender de lo que diagnostica (Tanda 21 · 8-sep-2026)
+
+> **Entrega:** `interno/diagnostico.html` v2.0 (reemplaza la v1.0) + esta edición.
+> **Sin acción manual pendiente.** No toca el núcleo, ni las reglas, ni la barra.
+
+**Corrige un error de la tanda anterior.** La v1.0 arrancaba con `verificarAuth` e
+importaba `utils.js` de forma estática. Las dos cosas la apagaban **justo en los dos
+casos que más importan**: si `utils.js` tiene un error de sintaxis, la página queda en
+blanco como cualquier otra (§3.15); y si no se puede entrar, `verificarAuth` te rebota
+al login — precisamente cuando lo que querés averiguar es *por qué* te rebota al login.
+
+La página de Casa Verde tenía esas dos decisiones **escritas en su propia cabecera**
+desde que se escribió. La v1.0 copió su estructura sin leer su fundamento. La regla
+general quedó en `PROTOCOLO-DESARROLLO.md` §11.2 del repositorio `datos`: **una pantalla
+de diagnóstico no puede depender de lo que diagnostica.**
+
+Qué cambia:
+
+1. **No importa el núcleo para arrancar.** Lo carga `await import('./utils.js?d=…')`
+   dentro de un `try`, ya empezada la pantalla. Si falla, **la sección 3 lo dice con el
+   mensaje del error** y las secciones 4 a 7 avisan que no se pueden correr. El `?d=` es
+   a propósito: fuerza traerlo de la red, que es la única forma de detectar un núcleo
+   viejo. No duplica la app de Firebase — `initializeApp` con la misma config devuelve la
+   que ya existe, así que la sesión se conserva.
+2. **No usa `verificarAuth`.** Espera a que Auth termine de arrancar
+   (`authStateReady()`, con alternativa por `onAuthStateChanged` y plazo de 8 s) y
+   después **mira** `currentUser` sin redirigir a nadie. Sin sesión, lo dice y ofrece
+   «Ir al login».
+3. **No depende de `design-system.css` para verse.** Lleva sus propios estilos mínimos:
+   es la página que se abre cuando algo se rompe.
+4. **Muestra el código crudo del error** —`permission-denied`, `unavailable`, `plazo`—
+   porque tienen soluciones distintas (§3.13).
+5. Las secciones **1 y 2 corren sin nada**: navegador, service worker, cachés y archivos
+   del servidor no necesitan ni el núcleo ni sesión.
+
+Se suma además el **sello propio de la pantalla** (`diagnostico-2.0`), visible en la
+sección 1 y en el encabezado del informe. Es el primer archivo HTML del proyecto que
+lleva sello a la vista: un primer paso del pendiente de §12, y el lugar más lógico para
+empezar — la pantalla que reporta sellos tiene que reportar el suyo.
+
+Y la sección 4 ahora marca `config/publico` en **rojo** cuando no existe, con qué se
+rompe y cómo se arregla, en vez del ⚠️ genérico de la v1.0 (ver §12, pendiente 0).
 
 ---
 
