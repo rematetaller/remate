@@ -902,7 +902,20 @@ el sistema por andando.
 
 ## 12. PENDIENTES
 
-0. **El `sw.js` no tiene un contador que nadie pueda saltear.** Su `CACHE_NAME` es
+0. ⚠️ **`config/publico` no existe, y eso deja la puerta pública sin salida.** Lo
+   encontró la pantalla de diagnóstico en su primera corrida (Tanda 20). Sin ese
+   documento, `index.html` cae a sus valores por defecto: el texto dice *"Escribile por
+   WhatsApp a Florencia"* pero `telefonoWhatsapp` viene vacío, y el código hace
+   `btn.style.display = "none"`. **El botón de WhatsApp no aparece.** Quien llega con una
+   llave vencida lee a quién escribirle y no tiene con qué — exactamente lo que el §9.1
+   de `PROTOCOLO-INTERFAZ.md` prohíbe, en el proyecto que ese párrafo cita **como el
+   modelo**. **No es un bug:** el código maneja bien la ausencia, es un dato que falta.
+   **Se arregla desde el panel** en un minuto: Configuración → contacto y textos
+   públicos, y guardar. Después, volver a correr el diagnóstico.
+   > Vale anotar cómo se encontró: **era invisible desde adentro del panel**, porque el
+   > panel nunca abre la puerta pública. Ninguna cantidad de intentos a ciegas lo hubiera
+   > encontrado; una pantalla que mide lo puso en un renglón.
+1. **El `sw.js` no tiene un contador que nadie pueda saltear.** Su `CACHE_NAME` es
    `"ratetaller-cache-v1"` —clavado en `v1` desde que existe, y de paso mal escrito: le
    falta la «me»—. En Casa Verde y CasaYourte lo que hace incontorneable a la `VERSION` es
    la lista `SHELL` con su `addAll`, que es todo o nada: sin subirla la entrega no llega.
@@ -911,13 +924,13 @@ el sistema por andando.
    notara** (§8.1 del protocolo común). No es motivo para inventarle una `SHELL` que no
    necesita: es motivo para saber que acá el registro al día es el único contador que
    queda. **Decisión abierta, y toca una PWA en vivo.**
-1. **Notificaciones** — avisar a los dos administradores cuando un comprador envía un
+2. **Notificaciones** — avisar a los dos administradores cuando un comprador envía un
    pedido o una oferta. EmailJS (resumen) + CallMeBot (WhatsApp) vía Netlify, reutilizando
    lo de Casa Verde. **Decisión abierta:** compartir el proyecto Netlify de Casa Verde o
    crear uno propio, teniendo en cuenta el manejo de créditos (publish manual + repo
    desconectado). Es lo único que le falta al circuito para no depender de que alguien
    abra el panel.
-2. **Dominio propio** — la URL ya existe (`rematetaller.github.io/remate/`); falta decidir
+3. **Dominio propio** — la URL ya existe (`rematetaller.github.io/remate/`); falta decidir
    si va dominio propio. Cuando se decida, revisar todo lo que arma links absolutos,
    empezando por el mensaje precargado de WhatsApp.
 3. **Favicon y `theme-color` en las dos páginas públicas** — `index.html` y
@@ -1053,6 +1066,17 @@ Prueba seis cosas, que son las conexiones reales del panel:
 herramienta. Se abre escribiendo la dirección, igual que la de Casa Verde. Así no le come
 un lugar a la barra, que es exactamente el problema que este proyecto ya pagó dos veces
 (§0.2 de `PROTOCOLO-INTERFAZ.md`).
+
+> **Verificación de esta tanda (§11.5 del protocolo común), corrida el 8-sep-2026 a las
+> 03:10 desde `https://rematetaller.github.io/remate/interno/diagnostico.html`:**
+>
+> - **Navegador y app:** en línea · pestaña · service worker activo, alcance `/remate/interno/` · caché `ratetaller-cache-v1`.
+> - **Archivos:** los doce responden. `utils.js` sirviendo v1.11, `design-system.css` v1.1 — coinciden con el inventario §6.
+> - **Sesión:** Mauro, admin, `activo: true`. `puede()` resuelve los seis permisos.
+> - **Colecciones:** las ocho se leen. `categorias` 3, `productos` 2, `llaves` 4, `pedidos` 2, `ventas` 2, `metodosPago` 0, `documentos` 3, `usuarios` 2.
+> - **Reglas vivas: las tres negativas dieron denegado**, y la de desactivarse a uno mismo también. ✅ **Las v0.6 están publicadas de verdad.** Con esto se cierra la verificación 1 del §11, que era el pendiente más viejo del proyecto — y ya no hace falta la consola para probarlo.
+> - **Cloudinary:** cloud `r9u5oous`, preset `preset-remate`, el CDN responde.
+> - ⚠️ **Un hallazgo, y es de los que importan:** `config/publico` **no existe**. Ver §12.
 
 **El número de tanda salió del registro, no del `sw.js`.** El § 8.1 del protocolo común
 dice que sale de la `VERSION` del service worker, que es el único contador que nadie puede
