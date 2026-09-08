@@ -1,6 +1,6 @@
 # REMATE TALLER — Documentación del sistema
 
-**Edición del 8 de septiembre de 2026 · v0.5.14**
+**Edición del 8 de septiembre de 2026 · v0.5.15**
 
 > La cabecera decía *"7 de agosto · v0.5.5"* mientras el registro llegaba a la Tanda 19 y
 > el código a `utils.js` v1.11. **Un documento que se presenta con la fecha de hace un mes
@@ -500,7 +500,7 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | `interno/utils.js` | **1.11** | Núcleo: Firebase, auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, helpers |
 | `interno/design-system.css` | **1.1** | Estilos mobile-first |
 | `interno/documentos.html` | — | Libretas de propiedad: alta, listado y consulta. Exige el permiso `documentos`. **Faltaba en este inventario** hasta el 2026-09-07 |
-| `interno/diagnostico.html` | **2.0** | Prueba las conexiones reales del panel y **que las reglas estén publicadas**. Sin ítem en la barra y **sin depender del núcleo**: se abre escribiendo la dirección y carga aunque `utils.js` esté roto |
+| `interno/diagnostico.html` | **2.1** | Prueba las conexiones reales del panel y **que las reglas estén publicadas**. Sin ítem en la barra y **sin depender del núcleo**: se abre escribiendo la dirección y carga aunque `utils.js` esté roto |
 | `interno/prompt-libretas.md` | — | Prompt de extracción de datos de una libreta a JSON. **Faltaba en este inventario** hasta el 2026-09-07 |
 | `interno/login.html` | 1.0 | Login admin |
 | `interno/index.html` | 1.0 | Router/portero del panel |
@@ -1021,6 +1021,24 @@ el sistema por andando.
 >
 > **La lección, que vale más que las siete entradas:** un registro no se detiene con un
 > aviso. Se detiene en silencio, y lo que se rompe después no parece tener nada que ver.
+
+---
+
+## v0.5.15 — Dos correcciones al informe del diagnóstico (Tanda 22 · 8-sep-2026)
+
+> **Entrega:** `interno/diagnostico.html` v2.1. Sin acción manual pendiente.
+
+Las encontró la primera corrida de la v2.0, y las dos son de la v2.0, no de antes:
+
+1. **`permisos: ninguno` se leía como una alarma.** La v1.0 preguntaba a `puede()`, que
+   para un admin devuelve todo; la v2.0 pasó a leer el mapa crudo de la ficha, que en un
+   admin **está vacío y así corresponde**. Es más exacto y peor: quien lo lee concluye
+   que perdió los permisos. Ahora dice *«admin: puede todo (su mapa de permisos está
+   vacío, y así corresponde)»*, y para un colaborador sin nada tildado avisa que no va a
+   poder hacer casi nada. **Un dato cierto mal presentado hace tomar la decisión
+   equivocada igual que un dato falso.**
+2. **Faltaba el encabezado de la sección 4 en el informe copiable.** Las colecciones
+   aparecían colgando de la sección 3, sin separador.
 
 ---
 

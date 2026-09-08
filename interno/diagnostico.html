@@ -104,7 +104,7 @@
 //     'permission-denied' y 'unavailable' tienen soluciones distintas.
 // Regla general en PROTOCOLO-DESARROLLO.md §11.2, repo `datos`.
 // ═══════════════════════════════════════════════════════════
-const SELLO = "diagnostico-2.0";
+const SELLO = "diagnostico-2.1";
 const $ = (id) => document.getElementById(id);
 
 const linea = (est, titulo, detalle) =>
@@ -258,11 +258,18 @@ async function s3() {
     } else {
       ficha = snap.data();
       const perms = Object.keys(ficha.permisos || {}).filter((k) => ficha.permisos[k]);
+      // El admin pasa por encima del catálogo, así que su mapa de permisos
+      // suele estar vacío. Decir «permisos: ninguno» a secas se lee como una
+      // alarma cuando es lo normal: hay que decir qué puede DE VERDAD.
+      const resumen = ficha.rol === 'admin'
+        ? 'admin: puede todo' + (perms.length ? ' · además tildados: ' + perms.join(', ')
+            : ' (su mapa de permisos está vacío, y así corresponde)')
+        : (perms.join(', ') || 'ninguno tildado: no va a poder hacer casi nada');
       h += linea(ficha.activo === true ? 'ok' : 'mal',
         'Ficha: ' + (ficha.nombre || '(sin nombre)') + ' · rol ' + (ficha.rol || '?'),
-        'activo: ' + ficha.activo + ' · permisos: ' + (perms.join(', ') || 'ninguno'));
+        'activo: ' + ficha.activo + ' · permisos: ' + resumen);
       anotar('ficha: ' + (ficha.nombre || '?') + ' · rol ' + ficha.rol + ' · activo ' + ficha.activo);
-      anotar('permisos: ' + (perms.join(', ') || 'ninguno'));
+      anotar('permisos: ' + resumen);
     }
   } catch (e) {
     h += linea('mal', 'No se pudo leer tu ficha', motivo(e));
@@ -285,6 +292,7 @@ const COLECCIONES = [
 ];
 
 async function s4() {
+  anotar('\n=== 4 · LECTURA DE CADA COLECCIÓN ===');
   let h = '';
   const soyAdmin = ficha && ficha.rol === 'admin';
   for (const it of COLECCIONES) {
