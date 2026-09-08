@@ -1,0 +1,199 @@
+// =====================================================
+// remateTaller — Reglas de Firestore v0.6 (7-ago-2026)
+// Se pegan COMPLETAS en la consola. Nunca por fragmentos.
+//
+// Cambios respecto de la v0.5:
+//  0. Entra `documentos` (libretas de propiedad) con su bloque propio.
+//     NO es de lectura pública, a diferencia del catálogo: tiene el
+//     nombre del titular —una persona ajena al negocio— y los números
+//     de motor y chasis, que publicados sirven para clonar la identidad
+//     de un vehículo. Solo usuarios con permiso 'documentos'.
+//
+// Lo que trajo la v0.5 respecto de la v0.4:
+//  1. PERMISOS APLICADOS EN EL SERVIDOR. El catálogo vive en utils.js
+//     (PERMISOS) y acá se hace valer: inventario, cobros, entregas,
+//     llaves, validar. Sin esto, esconder botones es decoración.
+//  2. EL PRECIO ES DE QUIEN TASA. Quien tiene 'inventario' puede crear y
+//     editar artículos, pero NO tocar precioSugerido, precioLote ni
+//     moneda. Crea con precio en null; el que tiene 'validar' lo tasa
+//     después, a distancia, desde la bandeja de pendientes.
+//  3. LA VENTA ES INMUTABLE, DE VERDAD. Hasta ahora que `items` y
+//     `totales` no se tocaran lo cuidaba la interfaz. Ahora una
+//     actualización de venta solo puede afectar `pago` y `entrega`, y
+//     cada uno pide su permiso.
+//  4. El rol 'admin' pasa por encima de todos los permisos, y es el único
+//     que toca usuarios, textos públicos y borrados.
+// =====================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Helpers ----------
+
+    // Los get() dentro de una misma evaluación se resuelven una sola vez,
+    // así que esto cuesta UNA lectura por operación, no una por llamada.
+    function ficha() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function activo() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && ficha().activo == true;
+    }
+
+    function esAdmin() {
+      return activo() && ficha().rol == 'admin';
+    }
+
+    // El admin puede todo. El resto, lo que tenga tildado.
+    function puede(p) {
+      return activo() && (
+        ficha().rol == 'admin'
+        || ficha().get('permisos', {}).get(p, false) == true
+      );
+    }
+
+    function llaveValida(c) {
+      return exists(/databases/$(database)/documents/llaves/$(c))
+        && get(/databases/$(database)/documents/llaves/$(c)).data.revocada == false
+        && get(/databases/$(database)/documents/llaves/$(c)).data.venceEn > request.time;
+    }
+
+    // Campos que solo puede escribir quien tasa (permiso 'validar').
+    // La moneda entra acá a propósito: elegir pesos o dólares es parte del
+    // acuerdo económico, no del inventariado.
+    function sinPrecio() {
+      return request.resource.data.get('precioSugerido', null) == null
+        && request.resource.data.get('precioLote', null) == null;
+    }
+
+    function preciosIntactos() {
+      return request.resource.data.get('precioSugerido', null)
+             == resource.data.get('precioSugerido', null)
+        && request.resource.data.get('precioLote', null)
+             == resource.data.get('precioLote', null)
+        && request.resource.data.get('moneda', null)
+             == resource.data.get('moneda', null);
+    }
+
+    function cambios() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // ---------- Usuarios: el documento que manda ----------
+    // Cada uno lee SU ficha sin estar activo todavía: es lo que consulta
+    // verificarAuth para decidir si lo deja pasar. Escribir es solo de
+    // admin, y nadie puede desactivarse a sí mismo, cambiarse el rol ni
+    // tocarse los permisos.
+    match /usuarios/{uid} {
+      allow get: if request.auth != null && (request.auth.uid == uid || esAdmin());
+      allow list: if esAdmin();
+      allow create: if esAdmin() && request.auth.uid != uid;
+      allow update: if esAdmin() && (
+        request.auth.uid != uid || (
+          request.resource.data.activo == true
+          && request.resource.data.rol == resource.data.rol
+          && request.resource.data.get('permisos', {}) == resource.data.get('permisos', {})
+        )
+      );
+      allow delete: if esAdmin() && request.auth.uid != uid;
+    }
+
+    // ---------- Llaves ----------
+    // get puntual público: el código ES la credencial. Listarlas sin
+    // sesión sería publicar todas las credenciales de una vez.
+    match /llaves/{codigo} {
+      allow get: if true;
+      allow list: if activo();
+      allow create, update: if puede('llaves');
+      allow delete: if esAdmin();
+    }
+
+    // ---------- Config pública ----------
+    // Solo el documento `publico`. Cualquier otro documento de config/
+    // (ej. un futuro `integraciones` con claves de terceros) queda
+    // denegado por defecto, que es exactamente lo que se quiere.
+    match /config/publico {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
+
+    // ---------- Catálogo: lectura pública ----------
+    match /categorias/{id} {
+      allow read: if true;
+      allow create, update: if puede('inventario');
+      allow delete: if esAdmin();
+    }
+
+    // Productos: dos manos distintas escriben el mismo documento.
+    // Quien inventaría carga todo menos el precio; quien tasa pone el
+    // precio y puede editar cualquier campo.
+    match /productos/{id} {
+      allow read: if true;
+      allow create: if puede('validar')
+        || (puede('inventario') && sinPrecio());
+      allow update: if puede('validar')
+        || (puede('inventario') && preciosIntactos());
+      allow delete: if esAdmin();
+    }
+
+    // ---------- Pedidos ----------
+    // El comprador crea y edita SOLO con llave vigente, y nunca después de
+    // que el pedido se validó o se descartó. Lo garantiza la regla, no la
+    // interfaz. Del lado del panel, editar y validar es de 'validar'.
+    match /pedidos/{id} {
+      allow get: if true;
+      allow list: if activo();
+      allow delete: if esAdmin();
+      allow create: if puede('validar') ||
+        (llaveValida(request.resource.data.llaveCodigo)
+          && (request.resource.data.estado == 'abierto'
+              || request.resource.data.estado == 'enviado'));
+      allow update: if puede('validar') ||
+        (llaveValida(request.resource.data.llaveCodigo)
+          && (resource.data.estado == 'abierto' || resource.data.estado == 'enviado')
+          && (request.resource.data.estado == 'abierto'
+              || request.resource.data.estado == 'enviado'));
+    }
+
+    // ---------- Ventas ----------
+    // Snapshot inmutable: la crea la validación y después de eso lo ÚNICO
+    // que puede cambiar es `pago` y `entrega`. Cada uno con su permiso, así
+    // el que cobra no mueve entregas ni al revés.
+    match /ventas/{id} {
+      allow read: if activo();
+      allow create: if puede('validar');
+      allow update: if activo()
+        && cambios().hasOnly(['pago', 'entrega'])
+        && (!cambios().hasAny(['pago']) || puede('cobros'))
+        && (!cambios().hasAny(['entrega']) || puede('entregas'));
+      allow delete: if esAdmin();
+    }
+
+    // ---------- Documentos (libretas de propiedad) ----------
+    // Datos de terceros: NO van al catálogo público. En el catálogo el
+    // comprador solo va a ver la insignia "con documentación", sin un
+    // solo número.
+    // No se borran desde el cliente: un documento cargado es evidencia.
+    match /documentos/{id} {
+      allow read: if puede('documentos');
+      allow create, update: if puede('documentos');
+      allow delete: if esAdmin();
+    }
+
+    // ---------- Métodos de pago ----------
+    // Se agregan en el momento, desde la pantalla de cobro.
+    match /metodosPago/{id} {
+      allow read: if activo();
+      allow create, update: if puede('cobros');
+      allow delete: if esAdmin();
+    }
+
+    // Sin catch-all: cualquier colección nueva entra con su bloque, en la
+    // misma tanda que el código que la usa (§5.3). Las que ya están
+    // decididas y todavía no existen —`registrables`, `compradores`— van a
+    // entrar con su regla cuando entre su pantalla.
+  }
+}

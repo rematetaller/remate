@@ -1,6 +1,12 @@
 # REMATE TALLER — Documentación del sistema
 
-**Edición del 7 de agosto de 2026 · v0.5.5**
+**Edición del 8 de septiembre de 2026 · v0.5.13**
+
+> La cabecera decía *"7 de agosto · v0.5.5"* mientras el registro llegaba a la Tanda 19 y
+> el código a `utils.js` v1.11. **Un documento que se presenta con la fecha de hace un mes
+> avisa mal desde el primer renglón**: quien lo abre asume que lo que falta es de un mes,
+> no de un día. La fecha y la versión de acá arriba se suben en la misma tanda que el
+> registro, como el resto (§8.4).
 
 Documento único del proyecto: el reglamento técnico, la historia de cada tanda y la
 guía de la parte pública, todo en un archivo. **Reemplaza a
@@ -395,13 +401,44 @@ queda inaccesible desde el cliente y falla a la vista, en la primera prueba. Ant
 el catch-all la dejaba abierta a cualquiera con sesión y el problema aparecía mucho después.
 El bloque se escribe en la misma entrega que el código que usa la colección.
 
-### 5.4 · Reglas vigentes (v0.4) — pegar completas en la consola
+### 5.4 · Reglas vigentes (v0.6) — pegar completas en la consola
 
-> Las **v0.3 quedaron verificadas**: estaban publicadas de verdad (§11.1 cerrada). La v0.4
-> se apoya en eso y cierra dos cosas que la v0.3 dejaba abiertas.
+> **Corrección del 2026-09-07.** Esta sección declaraba la **v0.4** como vigente cuando en
+> la consola estaban publicadas las **v0.6** (fechadas 7-ago-2026). Dos versiones enteras
+> —la v0.5 y la v0.6— nunca llegaron a este documento. Es el mismo error del §11.1 pero al
+> revés: aquella vez la consola estaba *atrás* de lo que el documento decía; esta vez estaba
+> *adelante*. La lección no cambia: **el documento no es autoridad sobre las reglas, la
+> consola lo es**, y la única forma de saber cuál de las dos está vieja es mirar.
 
-El archivo completo vive en `firestore.rules`, en la raíz del repositorio, y es la copia de
-lo que hay que pegar en la consola. Lo que cambia respecto de la v0.3:
+El archivo completo vive en `firestore.rules`, **en la raíz del repositorio**, y es la copia
+de lo que hay que pegar en la consola. Hasta el 2026-09-07 ese archivo se declaraba acá pero
+**no existía**: se creó copiando el texto real de la consola, no reconstruyéndolo desde esta
+descripción.
+
+**Lo que trae la v0.6 sobre la v0.5:**
+
+0. **Entra `documentos` (libretas de propiedad) con su bloque propio.** No es de lectura
+   pública, a diferencia del catálogo: tiene el nombre del titular —una persona ajena al
+   negocio— y los números de motor y chasis, que publicados sirven para clonar la identidad
+   de un vehículo. Solo con permiso `documentos`. **No se borran desde el cliente:** un
+   documento cargado es evidencia.
+
+**Lo que trajo la v0.5 sobre la v0.4:**
+
+1. **Los permisos se aplican en el servidor.** El catálogo vive en `utils.js` (`PERMISOS`) y
+   las reglas lo hacen valer: `inventario`, `cobros`, `entregas`, `llaves`, `validar`. Sin
+   esto, esconder botones es decoración.
+2. **El precio es de quien tasa.** Quien tiene `inventario` crea y edita artículos pero no
+   toca `precioSugerido`, `precioLote` ni `moneda`. Crea con el precio en `null`; quien
+   tiene `validar` lo tasa después desde la bandeja de pendientes.
+3. **La venta es inmutable de verdad.** Que `items` y `totales` no se tocaran lo cuidaba la
+   interfaz; ahora una actualización de venta solo puede afectar `pago` y `entrega`, y cada
+   uno pide su permiso — el que cobra no mueve entregas ni al revés.
+4. **El rol `admin` pasa por encima de todos los permisos**, y es el único que toca
+   usuarios, textos públicos y borrados.
+
+**Lo que trajo la v0.4 sobre la v0.3** (se conserva porque explica por qué el archivo es
+como es, §7.5):
 
 1. **Se eliminó el catch-all `match /{col}/{docId}`.** Rige el default deny (§5.3).
    Consecuencia inmediata: `metodosPago` necesitó su bloque propio, porque vivía del
@@ -446,13 +483,25 @@ autenticado. Lección directa de Casa Verde.
 Se actualiza en **toda** tanda que cree, borre o cambie un archivo. Un inventario
 desactualizado es peor que no tenerlo: da por existente lo que no está.
 
+> **Y esta regla se rompió, revisado el 2026-09-07.** Este inventario declaraba
+> `firestore.rules` 0.4 (el archivo no existía y lo publicado era 0.6), `utils.js` 1.6
+> (era 1.11) y `design-system.css` 1.0 (era 1.1), y **no listaba `documentos.html` ni
+> `prompt-libretas.md`**, dos archivos que sí estaban. Las filas verificables se
+> corrigieron leyendo los archivos. Las páginas de `interno/` no llevan sello en su
+> cabecera —solo `utils.js` y `design-system.css` lo tienen—, así que para el resto **no
+> hay contra qué verificar**: ese es el pendiente §12 de sellos visibles, y es la razón por
+> la que este inventario se puede desincronizar sin que nada avise.
+
 | Archivo | v | Qué es |
 |---|---|---|
 | `index.html` | 1.0 | Puerta pública: valida la llave (por link o a mano) y avisa por WhatsApp si no sirve |
-| `firestore.rules` | 0.4 | Copia de las reglas de la consola: default deny, `usuarios` cerrado, chequeo de `activo` |
+| `firestore.rules` | **0.6** | Copia de las reglas de la consola: default deny sin catch-all, `usuarios` cerrado, `activo` exigido, permisos aplicados en el servidor, venta inmutable y bloque de `documentos`. **Creado el 2026-09-07** copiando el texto real de la consola |
 | `comprador.html` | 2.3 | Catálogo (nombre + descripción, fotos ampliables), guía "¿Cómo comprar?", carrito, lote, propuesta, envío |
-| `interno/utils.js` | 1.6 | Núcleo: Firebase, auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, helpers |
-| `interno/design-system.css` | 1.0 | Estilos mobile-first |
+| `interno/utils.js` | **1.11** | Núcleo: Firebase, auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, helpers |
+| `interno/design-system.css` | **1.1** | Estilos mobile-first |
+| `interno/documentos.html` | — | Libretas de propiedad: alta, listado y consulta. Exige el permiso `documentos`. **Faltaba en este inventario** hasta el 2026-09-07 |
+| `interno/diagnostico.html` | 1.0 | Prueba las conexiones reales del panel y **que las reglas estén publicadas**. Sin ítem en la barra: se abre escribiendo la dirección |
+| `interno/prompt-libretas.md` | — | Prompt de extracción de datos de una libreta a JSON. **Faltaba en este inventario** hasta el 2026-09-07 |
 | `interno/login.html` | 1.0 | Login admin |
 | `interno/index.html` | 1.0 | Router/portero del panel |
 | `interno/panel.html` | 1.1 | Dashboard con KPIs, tarjeta "El circuito completo", ayuda con la visión general |
@@ -827,6 +876,12 @@ el sistema por andando.
    de pegarlas, probar en este orden: abrir el panel (si la ficha de usuario no se lee, no
    entra nadie), **agregar un método de pago en Ventas** —es la colección que vivía del
    catch-all—, cargar un producto, y abrir el catálogo con una llave en otro navegador.
+   ⚠ **Al 2026-09-08 lo publicado son las v0.6**, no las v0.4 (§5.4): dos versiones más
+   adelante de lo que este documento declaraba. **Buena parte de esta verificación ya la
+   hace sola `interno/diagnostico.html`** (Tanda 20): lee cada colección y comprueba que
+   las escrituras que las reglas deben negar efectivamente se nieguen, incluida la de
+   desactivarte a vos mismo. Lo que la página no puede hacer es el circuito con una llave
+   en otro navegador.
 2. ✅ **Preset de Cloudinary `preset-remate`** (unsigned) — creado y verificado, la carga
    de fotos funciona.
 3. **Prueba de circuito completo v0.5**, en este orden: crear un producto con nombre +
@@ -847,6 +902,15 @@ el sistema por andando.
 
 ## 12. PENDIENTES
 
+0. **El `sw.js` no tiene un contador que nadie pueda saltear.** Su `CACHE_NAME` es
+   `"ratetaller-cache-v1"` —clavado en `v1` desde que existe, y de paso mal escrito: le
+   falta la «me»—. En Casa Verde y CasaYourte lo que hace incontorneable a la `VERSION` es
+   la lista `SHELL` con su `addAll`, que es todo o nada: sin subirla la entrega no llega.
+   Acá el service worker cachea al vuelo, así que no obliga a nada. **Esa es la razón de
+   fondo por la que el registro de este proyecto se detuvo un mes sin que nadie lo
+   notara** (§8.1 del protocolo común). No es motivo para inventarle una `SHELL` que no
+   necesita: es motivo para saber que acá el registro al día es el único contador que
+   queda. **Decisión abierta, y toca una PWA en vivo.**
 1. **Notificaciones** — avisar a los dos administradores cuando un comprador envía un
    pedido o una oferta. EmailJS (resumen) + CallMeBot (WhatsApp) vía Netlify, reutilizando
    lo de Casa Verde. **Decisión abierta:** compartir el proyecto Netlify de Casa Verde o
@@ -917,6 +981,190 @@ el sistema por andando.
 
 ---
 
+---
+
+> ### ⚠️ Las siete entradas que siguen se reconstruyeron el 2026-09-07
+>
+> **El registro estuvo detenido un mes.** La última entrada era la Tanda 12 (7-ago) y el
+> código iba por la Tanda 19: entre medio, el changelog se mudó solo a la cabecera de
+> `interno/utils.js`, que pasó a hacer de registro paralelo. Es lo que §7.2 evita, y no
+> quedó ahí — mientras el registro estuvo parado, el inventario §6 derivó (decía `utils.js`
+> 1.6 cuando iba por 1.11), las reglas quedaron dos versiones atrás de la consola, y la
+> Tanda 11 declaró **entregado** un `firestore.rules` que nunca existió. **No fueron cuatro
+> problemas: fue uno.**
+>
+> **Qué es registro y qué es reconstrucción**, para que nadie lea esto como si fuera igual
+> de firme que lo de abajo:
+>
+> - **Es registro:** el texto de los cambios (sale de la cabecera de `utils.js`, escrita en
+>   su momento), las fechas y los archivos de cada entrega (salen de los commits).
+> - **Es reconstrucción:** la correspondencia entre cada tanda y su entrega, deducida por
+>   orden cronológico y por contenido; y los números de versión del documento, asignados
+>   ahora continuando la convención de arriba, porque las tandas originales no los
+>   escribieron.
+> - **Las tandas 14 y 18 no dejaron rastro en la cabecera de `utils.js`** porque no tocaron
+>   el núcleo. Se reconstruyeron leyendo el cambio real de sus archivos. Son las que más
+>   inferencia tienen.
+>
+> **La lección, que vale más que las siete entradas:** un registro no se detiene con un
+> aviso. Se detiene en silencio, y lo que se rompe después no parece tener nada que ver.
+
+---
+
+## v0.5.13 — Una pantalla que prueba las conexiones (Tanda 20 · 8-sep-2026)
+
+> **Entrega:** `interno/diagnostico.html` (nuevo) + esta edición del documento.
+> **Sin acción manual pendiente.** No toca el núcleo, ni las reglas, ni la barra de
+> navegación.
+
+Los otros dos sitios del ecosistema ya tenían su pantalla de diagnóstico y este no. Se
+suma siguiendo el patrón de los dos (§2.13 del protocolo común: repetir antes que
+inventar), combinando lo mejor de cada uno: **el checklist ✅/⚠️/❌ de CasaYourte** para
+leerlo de un vistazo en el teléfono, y **el informe de texto copiable de Casa Verde** para
+poder pegarlo en un chat.
+
+Prueba seis cosas, que son las conexiones reales del panel:
+
+1. **Navegador y app** — conexión, si corre instalada o en pestaña, el service worker y su
+   alcance, y qué cachés hay.
+2. **Archivos en el servidor** — que cada archivo del panel responda, su tamaño, y el sello
+   real de `utils.js` y `design-system.css`, que son los dos únicos que lo llevan escrito.
+3. **Sesión y permisos** — quién sos, tu ficha de `usuarios/`, tu `activo` y tu `rol`, y
+   qué permisos resuelve `puede()` de verdad.
+4. **Lectura de cada colección** — con plazo de 8 segundos, porque **sin red una lectura de
+   Firestore no falla: espera para siempre**, y sin el plazo la pantalla quedaba en blanco
+   como si el botón no anduviera (lección tomada de Casa Verde).
+5. **Que las reglas estén vivas** — ver abajo.
+6. **Cloudinary** — la configuración y que el CDN de entrega responda.
+
+> **La sección 5 se lee al revés que las otras, y es el punto de la pantalla.** Ahí lo que
+> se busca es que **falle**: intenta leer `config/integraciones`, leer y escribir una
+> colección sin bloque propio, y —en un botón aparte— desactivarte a vos mismo. **Cada
+> negativa es la prueba de que esa regla está publicada.** Si alguna pasa, las reglas que
+> están corriendo no son las que se creen (§5.4, y §4.8 del protocolo común).
+>
+> La prueba de desactivarte a vos mismo va **en su propio botón, con su aviso**, porque es
+> la única que intenta escribir sobre tu propia cuenta. El aviso dice qué hace y qué no se
+> pierde (§7.3 de `PROTOCOLO-INTERFAZ.md`), y si por un error de las reglas la escritura
+> pasara, la página la revierte en el acto y lo dice en rojo — y si tampoco pudiera
+> revertir, te da el uid para arreglarlo a mano en la consola.
+
+**Por qué no tiene ítem en la barra:** no es una parte de la aplicación, es una
+herramienta. Se abre escribiendo la dirección, igual que la de Casa Verde. Así no le come
+un lugar a la barra, que es exactamente el problema que este proyecto ya pagó dos veces
+(§0.2 de `PROTOCOLO-INTERFAZ.md`).
+
+**El número de tanda salió del registro, no del `sw.js`.** El § 8.1 del protocolo común
+dice que sale de la `VERSION` del service worker, que es el único contador que nadie puede
+saltear — pero el `sw.js` de este proyecto no tiene ninguno: su `CACHE_NAME` está clavado
+en `v1` desde que existe. Así que se aplicó el camino de repuesto: la última tanda
+registrada más uno. Queda anotado como pendiente en §12.
+
+---
+
+## v0.5.12 — La tolerancia de la búsqueda escala con el largo (Tanda 19 · 15-ago-2026)
+
+> **Entrega:** `interno/utils.js` v1.11.
+
+La tolerancia de la búsqueda difusa era **2 fija**. En un chasis de 17 caracteres eso es un
+match muy bueno; en un padrón de 4 significa que la mitad del número es distinta. Con eso,
+buscar `1423` devolvía el padrón `1.622` como coincidencia. Ahora la tolerancia **escala con
+el largo del identificador**.
+
+---
+
+## v0.5.11 — Corregir un documento ya cargado (Tanda 18 · 15-ago-2026)
+
+> **Entrega:** `interno/documentos.html`. **No tocó el núcleo** — de ahí que no figure en la
+> cabecera de `utils.js`.
+
+- **"Corregir este documento"** en cada resultado de la búsqueda: lo abre en la pestaña
+  Cargar con todo lo que tiene, para arreglar un número mal leído, sumar la ubicación o
+  agregar otra foto.
+- **Se sobrescribe el mismo registro, no se crea uno nuevo.** Queda anotado quién lo editó y
+  cuándo, sin perder la fecha de la carga original — §3.6: una escritura del sistema no
+  borra el trabajo de una persona.
+- Si se corrige justo el número que identifica al documento, **el registro conserva su
+  identificador interno**; la búsqueda usa los números corregidos, así que lo encuentra igual.
+- **No se borran documentos: se corrigen.** Borrar es solo del administrador y desde la
+  consola.
+- La ayuda `?` de la pantalla se actualizó en la misma entrega (§8.6).
+
+---
+
+## v0.5.10 — Las libretas viejas dicen "no hay número" de varias maneras (Tanda 17 · 15-ago-2026)
+
+> **Entrega:** `interno/utils.js` v1.10 + `interno/documentos.html`.
+
+- **`esSinDato()`**: reconoce los `X`, `S/N`, `-` con que las libretas viejas dicen que un
+  número **no existe**. Antes se guardaban como si fueran el número, y **dos libretas sin
+  chasis compartían el mismo id** — un derivado falso, §3.5.
+- **La coincidencia parcial arranca en 3 caracteres, no en 4:** buscar `KMQ` tiene que
+  encontrar la matrícula `KMQ 607`.
+
+---
+
+## v0.5.9 — Los accesos directos del panel salen de una sola lista (Tanda 16 · 15-ago-2026)
+
+> **Entrega:** `interno/utils.js` v1.9 + `interno/panel.html` + `interno/design-system.css` v1.1.
+
+**`seccionesDisponibles()`**: la lista de secciones que esta persona puede abrir, sacada del
+**mismo `NAV_ITEMS`** que pinta la barra. El panel la usa para sus accesos directos: **una
+sola fuente, así no hay dos listas que se desincronicen** (§3.5).
+
+---
+
+## v0.5.8 — Documentos: las libretas de propiedad (Tanda 15 · 15-ago-2026)
+
+> **Entrega:** `interno/utils.js` v1.8 + `interno/documentos.html` (nuevo) +
+> `interno/prompt-libretas.md` (nuevo).
+> **Acción manual pendiente en su momento: publicar el bloque `documentos` de las reglas.**
+> Está en las v0.6 publicadas (§5.4).
+
+- **Permiso `documentos`** y su ítem de navegación.
+- **Búsqueda por aproximación de identificadores** (motor, chasis, matrícula):
+  `canonizar()`, `plegar()` y `buscarIdentificador()`. Viven en el núcleo porque los van a
+  usar dos pantallas: `documentos.html` y, cuando exista, el cruce contra las motos del
+  inventario (§3.2).
+
+> **Corrección v1.8.1 dentro de la misma tanda:** `renderNav` armaba la fila del avatar pero
+> **no inyectaba su CSS** — solo lo hacía `mostrarCuenta`, o sea recién *después* de tocarlo.
+> Resultado: un botón sin estilo, cuadrado, apilado debajo de la marca. **Los estilos de un
+> componente se inyectan cuando se pinta, no cuando se usa.**
+
+---
+
+## v0.5.7 — La pantalla de usuarios se pone a la altura del catálogo (Tanda 14 · 14-ago-2026)
+
+> **Entrega:** `interno/configuracion.html`. **No tocó el núcleo** — de ahí que no figure en
+> la cabecera de `utils.js`.
+
+Es la contracara de la tanda 13: aquella puso el catálogo `PERMISOS` en el núcleo, ésta hizo
+la pantalla que lo usa.
+
+- **Chips de permisos tildables uno por uno**, cada uno con su detalle escrito en castellano
+  debajo — el límite del permiso se dice, no se deduce.
+- **Presets de alta**, para que dar de alta a alguien sea un toque y no cinco.
+- **"Usuarios administradores" pasa a llamarse "Usuarios del panel"**: desde la tanda 13 ya
+  no son todos administradores, y el título viejo decía lo contrario de lo que pasa.
+- Los estilos de los chips van **en la pantalla y no en `design-system.css`**: son de esta
+  pantalla. Los globales del núcleo los inyecta `utils.js` (§7.7).
+
+---
+
+## v0.5.6 — El catálogo de permisos entra al núcleo (Tanda 13 · 8-ago-2026)
+
+> **Entrega:** `interno/utils.js` v1.7 + esta edición del documento. En la misma sesión entró
+> también `interno/prompt-libretas.md`.
+
+- **`PERMISOS`: catálogo único**, con `puede()`, `esAdmin()`, los presets de alta y la
+  navegación filtrada. **El catálogo vive en el núcleo y solo ahí**: lo leen la navegación,
+  el editor de usuarios y las reglas de Firestore — que son las que de verdad los aplican.
+  Un permiso que está en el catálogo pero no en las reglas **es decoración**: la interfaz
+  esconde botones, el servidor es el que dice que no.
+- **`crearCuentaAuth()`**: crea la cuenta de Auth desde el panel con una **instancia
+  secundaria** de Firebase, para no perder la sesión propia.
+
 ## v0.5.5 — Salir del panel de verdad (Tanda 12 · 7-ago-2026)
 
 > **Entrega:** `interno/utils.js` v1.6 + esta edición. Sin cambios de reglas ni de datos.
@@ -957,6 +1205,15 @@ el sistema por andando.
 > **Entrega:** `firestore.rules` (nuevo archivo en la raíz) + esta edición del documento.
 > **Acción manual: pegar las reglas completas en la consola.** Sin eso, esta tanda no
 > existe.
+>
+> ⚠️ **Corrección del 2026-09-07 — este registro decía algo que no pasó.** La mitad manual
+> se hizo (las reglas se publicaron, y siguieron evolucionando hasta la v0.6). **El archivo
+> nunca se subió al repositorio**: se declaró entregado acá, en el inventario §6 y en el
+> mapa §2.1, y no existía. Se detectó al querer comparar lo publicado contra la copia y no
+> encontrar copia. Es exactamente lo que §7.4 prohíbe —no se registra como entregado nada
+> que no se haya entregado— y no se borra porque explica cómo se llega a creer que algo está
+> hecho durante un mes. El archivo se creó el 2026-09-07 copiando el texto real de la
+> consola, nunca reconstruyéndolo desde esta descripción.
 >
 > **Se cerró la verificación más vieja del proyecto.** Las v0.3 estaban publicadas de
 > verdad. El registro decía la verdad; lo que faltaba era mirar. Queda como lección al

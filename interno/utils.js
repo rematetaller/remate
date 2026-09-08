@@ -3,6 +3,16 @@
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 //
+// ── EL REGISTRO NO VIVE ACÁ ──────────────────────────────────
+// El registro de tandas es el LIBRO 2 de REMATETALLER-DOCUMENTACION.md,
+// y es la autoridad. Lo de abajo es contexto del archivo: qué cambió y
+// por qué, para quien lo está leyendo.
+// Entre agosto y septiembre de 2026 esto hizo de registro paralelo —el
+// Libro 2 quedó parado en la tanda 12 y acá siguieron las 13 a la 19—,
+// y mientras tanto el inventario derivó y las reglas quedaron dos
+// versiones atrás sin que nada avisara. Si volvés a anotar un cambio
+// acá, anotalo también allá, en la misma tanda.
+//
 // v1.11 (tanda 19):
 //  · La tolerancia de la búsqueda difusa ahora ESCALA CON EL LARGO. Era
 //    2 fija: en un chasis de 17 caracteres eso es un match muy bueno, en
