@@ -104,7 +104,7 @@
 //     'permission-denied' y 'unavailable' tienen soluciones distintas.
 // Regla general en PROTOCOLO-DESARROLLO.md §11.2, repo `datos`.
 // ═══════════════════════════════════════════════════════════
-const SELLO = "diagnostico-2.1";
+const SELLO = "diagnostico-2.2";
 const $ = (id) => document.getElementById(id);
 
 const linea = (est, titulo, detalle) =>
@@ -160,6 +160,31 @@ async function s1() {
     const k = await caches.keys();
     h += linea(k.length ? 'ok' : 'ojo', 'Cachés', k.length ? k.join(', ') : 'ninguna todavía');
     anotar('caches: ' + (k.join(', ') || 'ninguna'));
+    // Lo primero que explica una rareza es el sello (§3.12). El del shell es el
+    // nombre de caché que declara sw.js, y la prueba es que coincida con la que
+    // se está sirviendo: si no coinciden, el teléfono está mezclando archivos
+    // viejos y nuevos, y eso se parece a cualquier otro problema menos a lo que es.
+    const rsw = await conPlazo(fetch('sw.js?d=' + Date.now(), { cache: 'no-store' }), 12000);
+    const msw = (await rsw.text()).match(/const\s+(?:VERSION|CACHE_NAME)\s*=\s*['"]([^'"]+)['"]/);
+    if (!msw) {
+      h += linea('ojo', 'El shell que se sirve', 'sw.js no declara un nombre de caché reconocible');
+    } else if (!k.length) {
+      h += linea('ojo', 'El shell que se sirve', 'sw.js declara ' + msw[1] + ' y todavía no hay caché. Recargá una vez con señal.');
+    } else if (k.includes(msw[1])) {
+      // OJO: en este proyecto esto no prueba gran cosa. El CACHE_NAME está
+      // clavado en v1 desde que existe y no hay lista SHELL que obligue a
+      // moverlo, así que "coincide" es el estado por defecto, no una garantía.
+      // Es el pendiente 0 del §12.
+      h += linea('ojo', 'El shell que se sirve',
+        'sw.js declara ' + msw[1] + ' y es la que se sirve — pero ojo: este proyecto no sube ese '
+        + 'número nunca (§12, pendiente 0), así que la coincidencia no prueba que el shell esté al día.');
+      anotar('shell: ' + msw[1] + ' (contador que no se mueve — §12 pendiente 0)');
+    } else {
+      h += linea('mal', 'El shell que se sirve',
+        'sw.js declara ' + msw[1] + ' pero la caché activa es ' + k.join(', ')
+        + '. Estás viendo una mezcla de archivos viejos y nuevos.');
+      anotar('shell: DESFASADO — declara ' + msw[1] + ', sirve ' + k.join(', '));
+    }
   } catch (e) { h += linea('ojo', 'Cachés', 'no se pueden leer: ' + e.message); }
   $('s1').innerHTML = h;
 }

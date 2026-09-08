@@ -1,6 +1,6 @@
 # REMATE TALLER — Documentación del sistema
 
-**Edición del 8 de septiembre de 2026 · v0.5.15**
+**Edición del 8 de septiembre de 2026 · v0.5.16**
 
 > La cabecera decía *"7 de agosto · v0.5.5"* mientras el registro llegaba a la Tanda 19 y
 > el código a `utils.js` v1.11. **Un documento que se presenta con la fecha de hace un mes
@@ -500,7 +500,7 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | `interno/utils.js` | **1.11** | Núcleo: Firebase, auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, helpers |
 | `interno/design-system.css` | **1.1** | Estilos mobile-first |
 | `interno/documentos.html` | — | Libretas de propiedad: alta, listado y consulta. Exige el permiso `documentos`. **Faltaba en este inventario** hasta el 2026-09-07 |
-| `interno/diagnostico.html` | **2.1** | Prueba las conexiones reales del panel y **que las reglas estén publicadas**. Sin ítem en la barra y **sin depender del núcleo**: se abre escribiendo la dirección y carga aunque `utils.js` esté roto |
+| `interno/diagnostico.html` | **2.2** | Prueba las conexiones reales del panel y **que las reglas estén publicadas**. Sin ítem en la barra y **sin depender del núcleo**: se abre escribiendo la dirección y carga aunque `utils.js` esté roto |
 | `interno/prompt-libretas.md` | — | Prompt de extracción de datos de una libreta a JSON. **Faltaba en este inventario** hasta el 2026-09-07 |
 | `interno/login.html` | 1.0 | Login admin |
 | `interno/index.html` | 1.0 | Router/portero del panel |
@@ -1021,6 +1021,27 @@ el sistema por andando.
 >
 > **La lección, que vale más que las siete entradas:** un registro no se detiene con un
 > aviso. Se detiene en silencio, y lo que se rompe después no parece tener nada que ver.
+
+---
+
+## v0.5.16 — El shell que se sirve, y el informe al final (Tanda 23 · 8-sep-2026)
+
+> **Entrega:** `interno/diagnostico.html` v2.2. Sin acción manual pendiente.
+
+**Prueba nueva: comparar el nombre de caché que declara `sw.js` contra el que se está
+sirviendo.** Salió de una corrida de la pantalla de CasaYourte que reportaba una caché
+dos versiones atrás de la publicada **sin señalarlo**: es exactamente el síntoma de estar
+sirviendo una mezcla de archivos viejos y nuevos, que §3.12 dice que es lo primero a
+mirar ante cualquier rareza — y la pantalla lo tenía delante sin decirlo.
+
+> **Y acá la prueba avisa que no prueba nada, que es lo honesto.** El `CACHE_NAME` de
+> este proyecto está clavado en `v1` desde que existe y no hay lista `SHELL` que obligue
+> a moverlo, así que «coincide» es el estado por defecto y no una garantía. La pantalla
+> lo dice en ⚠️ y remite al pendiente 0 del §12. **Una prueba que devuelve ✅ sin poder
+> fallar nunca es peor que no tenerla**: da una confianza que no corresponde.
+
+El informe copiable y su botón ya estaban al final en esta pantalla; queda como la forma
+común de las tres (`PROTOCOLO-DESARROLLO.md` §11.2).
 
 ---
 
