@@ -31,8 +31,8 @@ details summary::-webkit-details-marker { display:none; }
     <label for="inpNombre">Nombre del comprador</label>
     <input type="text" id="inpNombre" autocomplete="off">
 
-    <label for="inpTelefono">Teléfono (con código de país, ej: 59899123456)</label>
-    <input type="tel" id="inpTelefono" inputmode="numeric" autocomplete="off">
+    <label for="inpTelefono">Teléfono (con código de país, ej: +59899123456)</label>
+    <input type="tel" id="inpTelefono" inputmode="tel" placeholder="+59899123456" autocomplete="off">
 
     <label for="selDuracion">Validez del acceso</label>
     <select id="selDuracion">
@@ -76,7 +76,7 @@ import {
   verificarAuth, renderNav, db, toast, iniciarAyuda,
   doc, setDoc, updateDoc, collection, getDocs, query, orderBy,
   serverTimestamp, generarCodigoLlave, urlBasePublica,
-  fmtFecha, fmtMoneda, tsAms, soloDigitos
+  fmtFecha, fmtMoneda, tsAms, telVisible, urlWhatsapp, avisoDeTelefono
 } from "./utils.js";
 
 iniciarAyuda("Cómo funcionan las llaves", `
@@ -162,11 +162,15 @@ async function cargarVentas() {
 // ---------- Crear ----------
 document.getElementById("btnCrear").addEventListener("click", async () => {
   const nombre = document.getElementById("inpNombre").value.trim();
-  const telefono = soloDigitos(document.getElementById("inpTelefono").value);
+  // Con «+»: es como se le muestra al comprador en el listado y como se lee
+  // un teléfono. wa.me lo recibe pelado desde `urlWhatsapp()`. Ver utils.js.
+  const telefono = telVisible(document.getElementById("inpTelefono").value);
   const dias = Number(document.getElementById("selDuracion").value);
 
   if (!nombre) { toast("Cargá el nombre del comprador.", "error"); return; }
   if (!telefono) { toast("Cargá el teléfono del comprador.", "error"); return; }
+  const avisoTel = avisoDeTelefono(telefono);
+  if (avisoTel) { toast(avisoTel, "error"); return; }
 
   const chkTodas = document.getElementById("chkTodas");
   let cats = [];
@@ -207,12 +211,9 @@ function mostrarNueva(codigo, nombre, telefono, vence) {
     try { await navigator.clipboard.writeText(link); toast("Link copiado.", "ok"); }
     catch (e) { toast("No se pudo copiar. Seleccionalo a mano.", "error"); }
   };
-  const msg = encodeURIComponent(
-    "Hola " + nombre + "! Este es tu acceso al catálogo de remateTaller " +
-    "(válido hasta el " + vence.toLocaleDateString("es-UY") + "):\n" + link
-  );
-  document.getElementById("btnEnviarWhatsapp").href =
-    "https://wa.me/" + telefono + "?text=" + msg;
+  const msg = "Hola " + nombre + "! Este es tu acceso al catálogo de remateTaller "
+            + "(válido hasta el " + vence.toLocaleDateString("es-UY") + "):\n" + link;
+  document.getElementById("btnEnviarWhatsapp").href = urlWhatsapp(telefono, msg);
   document.getElementById("cardNueva").style.display = "block";
   document.getElementById("cardNueva").scrollIntoView({ behavior: "smooth" });
 }
@@ -268,7 +269,7 @@ async function cargarLlaves() {
         '<div class="fila" style="justify-content:space-between;">' +
         "<strong>" + (l.nombre || "—") + "</strong>" + badge + "</div>" +
         '<p class="texto-suave" style="margin:6px 0;">Código: <strong>' + d.id + "</strong> · Tel: " +
-        (l.telefono || "—") + "<br>Vence: " + fmtFecha(l.venceEn) + " · Acceso: " + catsTxt + "</p>" +
+        (telVisible(l.telefono) || "—") + "<br>Vence: " + fmtFecha(l.venceEn) + " · Acceso: " + catsTxt + "</p>" +
         historial;
 
       if (!l.revocada && venceMs > ahora) {
@@ -298,11 +299,13 @@ async function cargarLlaves() {
       b.addEventListener("click", () => {
         const link = urlBasePublica() + "/?llave=" + b.dataset.codigo;
         const venceTxt = new Date(Number(b.dataset.vence)).toLocaleDateString("es-UY");
-        const msg = encodeURIComponent(
-          "Hola " + b.dataset.nombre + "! Este es tu acceso al catálogo de remateTaller " +
-          "(válido hasta el " + venceTxt + "):\n" + link
-        );
-        window.open("https://wa.me/" + b.dataset.tel + "?text=" + msg, "_blank");
+        const msg = "Hola " + b.dataset.nombre + "! Este es tu acceso al catálogo de remateTaller "
+                  + "(válido hasta el " + venceTxt + "):\n" + link;
+        // urlWhatsapp saca el «+» y codifica el texto: acepta el teléfono como
+        // esté guardado, con «+» o sin él (hay llaves de antes de esta tanda).
+        const u = urlWhatsapp(b.dataset.tel, msg);
+        if (!u) return toast("Esa llave no tiene teléfono cargado.", "error");
+        window.open(u, "_blank");
       });
     });
   } catch (e) {

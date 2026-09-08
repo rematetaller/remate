@@ -42,8 +42,8 @@
     <label for="inpNombreContacto">Nombre de contacto</label>
     <input type="text" id="inpNombreContacto" placeholder="Florencia">
 
-    <label for="inpTelefono">WhatsApp de contacto (con código de país, sin +)</label>
-    <input type="tel" id="inpTelefono" inputmode="numeric" placeholder="59899123456">
+    <label for="inpTelefono">WhatsApp de contacto (con código de país y el +)</label>
+    <input type="tel" id="inpTelefono" inputmode="tel" placeholder="+59899123456">
   </div>
 
   <div class="card">
@@ -123,7 +123,7 @@
 import {
   verificarAuth, renderNav, db, toast, iniciarAyuda, escapar,
   doc, getDoc, setDoc, updateDoc, collection, getDocs,
-  serverTimestamp, soloDigitos, fmtFecha,
+  serverTimestamp, telVisible, avisoDeTelefono, fmtFecha,
   PERMISOS, PRESETS, esAdmin, exigirPermiso, crearCuentaAuth, generarClave
 } from "./utils.js";
 
@@ -172,7 +172,8 @@ async function cargar() {
     if (!snap.exists()) return;
     const c = snap.data();
     document.getElementById("inpNombreContacto").value = c.nombreContacto || "";
-    document.getElementById("inpTelefono").value = c.telefonoWhatsapp || "";
+    // telVisible y no el crudo: si quedó guardado sin «+» de antes, se ve con «+».
+    document.getElementById("inpTelefono").value = telVisible(c.telefonoWhatsapp);
     document.getElementById("txtBienvenida").value = c.mensajeBienvenida || "";
     document.getElementById("txtVencido").value = c.mensajeVencido || "";
     document.getElementById("txtSinLlave").value = c.mensajeSinLlave || "";
@@ -184,8 +185,13 @@ async function cargar() {
 }
 
 document.getElementById("btnGuardar").addEventListener("click", async () => {
-  const tel = soloDigitos(document.getElementById("inpTelefono").value);
+  // Se guarda con «+», que es la forma que se le muestra a una persona. El
+  // formato pelado que pide wa.me lo arma `urlWhatsapp()` al usarlo, y sólo
+  // ahí. Ver utils.js, «Teléfonos».
+  const tel = telVisible(document.getElementById("inpTelefono").value);
   if (!tel) { toast("Cargá el WhatsApp de contacto.", "error"); return; }
+  const aviso = avisoDeTelefono(tel);
+  if (aviso) { toast(aviso, "error"); return; }
 
   const btn = document.getElementById("btnGuardar");
   btn.disabled = true;

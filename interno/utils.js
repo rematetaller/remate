@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.11)
+// utils.js — Núcleo compartido de remateTaller (v1.12)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 //
@@ -12,6 +12,18 @@
 // y mientras tanto el inventario derivó y las reglas quedaron dos
 // versiones atrás sin que nada avisara. Si volvés a anotar un cambio
 // acá, anotalo también allá, en la misma tanda.
+//
+// v1.12 (tanda 24):
+//  · Teléfonos: `telVisible()` y `urlWhatsapp()`. Un teléfono se GUARDA y se
+//    MUESTRA con el «+» del código de país, y el formato pelado que pide
+//    wa.me se arma en el momento de usarlo, en un solo lugar. Antes se
+//    guardaba sin «+» porque así lo quiere wa.me: dejar que el formato de
+//    un tercero decida cómo se le habla a una persona. Las dos toleran lo
+//    que ya está guardado, con «+» o sin él.
+//  · `avisoDeTelefono()`: las tres cosas que no pueden ser en un número
+//    internacional. La que pasa de verdad es el 0 inicial uruguayo, que
+//    hace que wa.me devuelva una página de error en vez del chat, sin que
+//    desde el panel se note.
 //
 // v1.11 (tanda 19):
 //  · La tolerancia de la búsqueda difusa ahora ESCALA CON EL LARGO. Era
@@ -900,9 +912,58 @@ export function urlBasePublica() {
   return window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, "");
 }
 
-/** Solo dígitos de un teléfono (para links wa.me). */
+/* ---------- Teléfonos ----------
+   Un teléfono tiene DOS formas y no son intercambiables:
+
+     · la que se le muestra a una persona lleva el «+» del código de país.
+       Sin él, «59899123456» no se lee como un número: se lee como un error.
+     · la que pide la API de WhatsApp NO lo lleva. wa.me quiere dígitos pelados.
+
+   La regla es guardar y mostrar la primera, y armar la segunda en el momento
+   de usarla. Al revés —guardar sin «+» porque así lo quiere wa.me— es dejar
+   que el formato de un tercero decida cómo se le habla a la gente.
+
+   Las dos funciones toleran cualquier entrada: con «+», sin «+», con espacios
+   o con guiones. Eso es a propósito, porque hay números guardados de antes. */
+
+/** Solo dígitos de un teléfono. Es lo que pide la API de WhatsApp, y nada más. */
 export function soloDigitos(t) {
   return String(t || "").replace(/\D/g, "");
+}
+
+/** El teléfono como se le muestra a una persona: con el «+» del código de país. */
+export function telVisible(t) {
+  const d = soloDigitos(t);
+  return d ? "+" + d : "";
+}
+
+/* Lo que está objetivamente mal en un teléfono internacional. Devuelve el
+   aviso, o "" si no hay nada que decir. No adivina el país: sólo tres cosas
+   que no pueden ser.
+
+   La del 0 es la que de verdad pasa: en Uruguay el número se dicta «098…»,
+   y ese 0 es para llamar DENTRO del país. Ningún código de país empieza con
+   0, así que un número que arranca en 0 nunca va a abrir un chat — wa.me
+   contesta con una página de error, no con el chat, y desde el panel eso no
+   se ve. El máximo de 15 dígitos es el del estándar E.164. */
+export function avisoDeTelefono(t) {
+  const d = soloDigitos(t);
+  if (!d) return "";
+  if (d[0] === "0") return "El número empieza con 0. Ese 0 sirve para llamar dentro del "
+    + "país; WhatsApp necesita el código de país. Uruguay es 598: +598 y el número sin el 0.";
+  if (d.length < 8) return "El número parece corto: son " + d.length
+    + " dígitos y con el código de país tendrían que ser al menos 8.";
+  if (d.length > 15) return "El número parece largo: son " + d.length
+    + " dígitos y un teléfono internacional no pasa de 15.";
+  return "";
+}
+
+/** El enlace para abrir un chat de WhatsApp. Acá —y en ningún otro lado— es
+    donde el «+» se saca, porque es el único lugar donde estorba. */
+export function urlWhatsapp(telefono, texto) {
+  const d = soloDigitos(telefono);
+  if (!d) return "";
+  return "https://wa.me/" + d + (texto ? "?text=" + encodeURIComponent(texto) : "");
 }
 
 export function toast(mensaje, tipo = "ok") {

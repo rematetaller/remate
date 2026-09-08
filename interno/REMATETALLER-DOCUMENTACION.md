@@ -1024,6 +1024,49 @@ el sistema por andando.
 
 ---
 
+## v0.5.17 — El teléfono se muestra con el + (Tanda 24 · 8-sep-2026)
+
+> **Entrega:** `interno/utils.js` v1.12, `interno/configuracion.html`,
+> `interno/llaves.html`, `index.html`. Sin acción manual pendiente.
+
+Un teléfono tiene **dos formas y no son intercambiables**: la que se le muestra a una
+persona lleva el `+` del código de país, y la que pide la API de WhatsApp no lo lleva,
+porque `wa.me` quiere dígitos pelados. Se estaba guardando la segunda —el panel pedía
+`59899123456` y así lo devolvía—, que es **dejar que el formato de un tercero decida cómo
+se le habla a la gente**. `59899123456` no se lee como un número: se lee como un error.
+
+Se guarda y se muestra con `+`; el formato pelado se arma al usarlo:
+
+| Función nueva en `utils.js` | Qué hace |
+|---|---|
+| `telVisible(t)` | el teléfono como lo lee una persona: `+` y los dígitos |
+| `urlWhatsapp(tel, texto)` | el enlace a `wa.me`. **Es el único lugar donde el `+` desaparece** |
+| `avisoDeTelefono(t)` | lo que está objetivamente mal, o `""` |
+| `soloDigitos(t)` | sigue existiendo, ahora dicho por lo que es: lo que pide la API |
+
+Las tres **toleran las dos formas**, con `+` y sin él. No hay migración: los teléfonos
+guardados de antes se ven con `+` desde el primer día.
+
+**Y de paso apareció lo que de verdad rompe.** Un número que empieza con `0` —`098…`, que
+es como se dicta acá— es el error que la gente comete. **Ningún código de país empieza con
+`0`**, así que `wa.me` devuelve una página de error en lugar del chat, y **desde el panel
+eso no se nota nunca**: el botón está, el enlace existe, y lo que falla es del otro lado.
+`avisoDeTelefono()` lo ataja antes de guardar, junto con menos de 8 dígitos y más de 15
+(el máximo de E.164). No adivina el país: sólo dice lo que es imposible.
+
+De paso, `index.html` repetía a mano el `replace(/\D/g, "")` para armar el enlace. Ahora
+lo pide al núcleo (§3.2: lo que hace falta en dos páginas sube a `utils.js`).
+
+**Dónde se ve el cambio:** Configuración → «WhatsApp de contacto (con código de país y el
++)»; Llaves → el alta, y el teléfono de cada llave en el listado.
+
+> El criterio quedó escrito para los tres sitios en `PROTOCOLO-INTERFAZ.md` §11, y
+> `casaverdecanas` lo adoptó en la misma tanda (`CV2.telVisible`, `CV2.urlWhatsapp`,
+> `CV2.avisoDeTelefono`, y el campo de `cabanas.html`). `CasaYourte` no lo necesita: su
+> número está en un `href` y no se le muestra a nadie como texto.
+
+---
+
 ## v0.5.16 — El shell que se sirve, y el informe al final (Tanda 23 · 8-sep-2026)
 
 > **Entrega:** `interno/diagnostico.html` v2.2. Sin acción manual pendiente.

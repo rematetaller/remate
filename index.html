@@ -49,7 +49,7 @@
 </div>
 
 <script type="module">
-import { validarLlave, leerConfigPublico, fmtFecha } from "./interno/utils.js";
+import { validarLlave, leerConfigPublico, fmtFecha, urlWhatsapp } from "./interno/utils.js";
 
 const V = {
   cargando: document.getElementById("vistaCargando"),
@@ -70,7 +70,7 @@ function irAlCatalogo(codigo) {
 function mostrarContacto(motivo) {
   // Textos y teléfono editables por los admins en Configuración.
   const nombre = config.nombreContacto || "Florencia";
-  const tel = String(config.telefonoWhatsapp || "").replace(/\D/g, "");
+  const tel = config.telefonoWhatsapp || "";
   let texto;
 
   if (motivo === "vencida") {
@@ -86,9 +86,13 @@ function mostrarContacto(motivo) {
   document.getElementById("txtContacto").textContent = texto;
 
   const btn = document.getElementById("btnWhatsapp");
-  if (tel) {
-    const msg = encodeURIComponent(config.mensajePrecargado || "Hola! Quisiera acceso al catálogo de remateTaller.");
-    btn.href = "https://wa.me/" + tel + "?text=" + msg;
+  // El enlace lo arma utils.js: es el único lugar donde el «+» se saca, y
+  // acepta el teléfono con «+» o sin él. Antes esto repetía el replace a mano
+  // (§3.2: lo que hace falta en dos páginas sube al núcleo).
+  const enlace = urlWhatsapp(tel, config.mensajePrecargado
+    || "Hola! Quisiera acceso al catálogo de remateTaller.");
+  if (enlace) {
+    btn.href = enlace;
     btn.style.display = "inline-flex";
   } else {
     btn.style.display = "none";
