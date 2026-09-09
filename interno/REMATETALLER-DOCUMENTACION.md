@@ -115,7 +115,9 @@ conversación**. Este vive en el repositorio y en el conocimiento del proyecto.
 | Marca | Fondo `#b45309` (--c-primario), trazo `#fef3e2` (--c-primario-claro). En la topbar, el ícono `gavel` de Material Icons |
 | Fotos | Cloudinary cloud **`r9u5oous`**, preset unsigned **`preset-remate`** ✅ creado y verificado, carpeta `remate/productos` |
 | Compresión de imágenes | JPEG 0.85 client-side · **productos: máx 800px** · otros usos: máx 2000px |
-| Funciones de servidor | **ninguna todavía.** Las notificaciones (EmailJS + CallMeBot) son el próximo pendiente y van por Netlify (§12) |
+| Funciones de servidor | **una sola**, desde la tanda 25: `api/tuya.mjs` en **Vercel**, el puente a las luces del depósito. Existe porque Tuya exige firmar con un secreto, y un secreto no puede vivir en el navegador. El sitio NO se mudó: Vercel sirve sólo `/api/tuya`. Ver `LUCES.md`. Las notificaciones (EmailJS + CallMeBot) siguen pendientes y van por Netlify (§12) |
+| Domótica | **Tuya Cloud**, sólo desde `api/tuya.mjs`. Las luces del depósito ya estaban conectadas a un dispositivo Tuya; lo que se agregó es el camino desde el teléfono |
+| Variables de entorno | **cinco, desde la tanda 25**, todas en Vercel: `TUYA_CLIENT_ID`, `TUYA_CLIENT_SECRET`, `TUYA_REGION`, `TUYA_LUCES`, `ORIGENES_PERMITIDOS`. Los nombres están en `/.env.example`; los valores los carga Mauro a mano y **nunca** entran al repositorio |
 | Dispositivos | Mobile-first, teléfono Android/iPhone. El escritorio es el caso raro |
 | Idioma | Rioplatense, voseo — en la interfaz y en la documentación |
 
@@ -127,8 +129,13 @@ messagingSenderId `815214584678`, appId `1:815214584678:web:3fd234a6e92eed932e5e
 públicos por diseño: no son secretos, son identificadores. Lo que protege el sistema son
 las reglas de Firestore (§5), que las aplica el servidor. **Nunca salen del lado
 servidor ni entran al repositorio:** el `api_secret` de Cloudinary, las contraseñas de
-los administradores (que además **no se comparten entre ellos**) y las futuras claves de
-terceros, que irán en variables de entorno de Netlify.
+los administradores (que además **no se comparten entre ellos**), el Access Secret de
+Tuya —que vive en las variables de entorno de Vercel— y las futuras claves de terceros.
+
+**La dirección del puente de luces (`PUENTE_LUCES` en `utils.js`) sí puede estar en el
+código**, y conviene no confundirla con un secreto: la función no hace absolutamente
+nada sin un token de Firebase válido de una cuenta activa con el permiso. Publicarla no
+abre ninguna puerta; "protegerla" sí rompería la pantalla.
 
 ### 2.1 · Estructura del repositorio
 
@@ -136,6 +143,12 @@ terceros, que irán en variables de entorno de Netlify.
 /index.html                  → LA PUERTA PÚBLICA: valida la llave, o avisa por WhatsApp
 /comprador.html              → el catálogo y el carrito del comprador (entra con llave)
 /firestore.rules             → copia de las reglas publicadas en la consola
+/LUCES.md                    → el puente a Tuya: por qué existe, cómo se pone en marcha
+/.env.example                → los NOMBRES de las variables de entorno. Nunca valores
+/vercel.json                 → sólo /api sale por Vercel; el resto redirige al sitio real
+/api/tuya.mjs                → LA ÚNICA FUNCIÓN DE SERVIDOR: verifica el token de
+                               Firebase, lee la ficha con ESE token, y firma contra Tuya
+/pruebas/luces.mjs           → banco de pruebas del puente. `node pruebas/luces.mjs`
 /interno/                    → el panel de los dos administradores
    utils.js                  → el núcleo. Firebase, auth, nav, llaves, fotos, ayuda, helpers
    design-system.css         → estilos comunes, mobile-first
@@ -146,6 +159,7 @@ terceros, que irán en variables de entorno de Netlify.
    llaves.html               → generar llaves y ver el historial de cada comprador
    pedidos.html              → revisar, editar, validar o descartar
    ventas.html               → post-venta: pagos, entrega, detalle de artículo
+   luces.html                → encender y apagar las luces del depósito, y quién lo hizo
    configuracion.html        → textos públicos y gestión de usuarios
    manifest.webmanifest      → PWA del panel (nombre, colores, iconos)
    sw.js                     → service worker: instalación + caché network-first
@@ -307,6 +321,11 @@ config/publico       → { nombreContacto, telefonoWhatsapp, mensajeBienvenida,
                          actualizadoEn, actualizadoPor }
 categorias/{id}      → { nombre, activa, creadaEn }
 metodosPago/{id}     → { nombre, activa, creadoEn, creadoPor }
+lucesRegistro/{id}   → { uid, nombre, luz, label, encendida, cuando }
+                       Quién encendió o apagó una luz del depósito y cuándo.
+                       Se agrega y no se edita: un movimiento es evidencia.
+                       `uid` tiene que ser el de quien escribe — lo exige la
+                       regla, para que nadie anote a nombre de otro.
                        // solo los métodos custom. "Efectivo" y "Transferencia" son
                        // base hardcodeada en ventas.html
 productos/{id}       → { nombre, descripcion, categoriaId, cantidad, ubicacion,
@@ -385,8 +404,15 @@ Tres círculos, de afuera hacia adentro:
    mientras el pedido esté `abierto` o `enviado`. Un comprador **no puede escribir sobre
    un pedido ya validado**: eso lo garantiza la regla, no la interfaz.
 3. **Todo lo demás, solo usuarios activos.** `usuarios`, `ventas`, `metodosPago`,
-   `llaves` (listar), borrados. **Autenticado no alcanza**: la regla exige que exista la
-   ficha en `usuarios/{uid}` y que `activo == true` (§5.6).
+   `lucesRegistro`, `llaves` (listar), borrados. **Autenticado no alcanza**: la regla
+   exige que exista la ficha en `usuarios/{uid}` y que `activo == true` (§5.6).
+
+**Y hay un cuarto círculo, desde la tanda 25, que no vive en Firestore.** Las luces del
+depósito no son un documento: la orden va a la nube de Tuya por `api/tuya.mjs`. Esa
+función verifica el token de Firebase de quien pide y después lee `usuarios/{uid}`
+**con ese mismo token**, o sea pasando por estas mismas reglas. El criterio no se
+duplicó: se reusó. Lo que la regla `lucesRegistro` protege es el registro de quién
+encendió, no el interruptor. Ver `LUCES.md`.
 
 **Nunca se puede listar `llaves` sin sesión.** El `get` por código está abierto porque el
 código *es* la credencial; poder listarlas sería entregar todas las credenciales.
@@ -495,9 +521,14 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | Archivo | v | Qué es |
 |---|---|---|
 | `index.html` | 1.0 | Puerta pública: valida la llave (por link o a mano) y avisa por WhatsApp si no sirve |
-| `firestore.rules` | **0.6** | Copia de las reglas de la consola: default deny sin catch-all, `usuarios` cerrado, `activo` exigido, permisos aplicados en el servidor, venta inmutable y bloque de `documentos`. **Creado el 2026-09-07** copiando el texto real de la consola |
+| `firestore.rules` | **0.7** | Copia de las reglas de la consola: default deny sin catch-all, `usuarios` cerrado, `activo` exigido, permisos aplicados en el servidor, venta inmutable, bloque de `documentos` y —desde la tanda 25— `lucesRegistro`. **Creado el 2026-09-07** copiando el texto real de la consola |
+| `LUCES.md` | 1.0 | El puente a Tuya: por qué hay un servidor en un proyecto estático, quién puede encender, la puesta en marcha en cuatro pasos y qué mirar cuando no anda |
+| `.env.example` | 1.0 | Los **nombres** de las cinco variables de entorno de Vercel. Nunca valores |
+| `vercel.json` | 1.0 | Que de Vercel salga **sólo** `/api`: cualquier otra dirección redirige a GitHub Pages, que es el sitio de verdad |
+| `api/tuya.mjs` | 1.0 | La única función de servidor. Verifica la firma RS256 del token de Firebase, lee `usuarios/{uid}` **con ese mismo token** (sin credencial de servidor), y recién ahí firma contra Tuya. Lista blanca de luces y de orígenes, freno por aparato |
+| `pruebas/luces.mjs` | 1.0 | Banco de pruebas del puente: 24 casos con la nube de Tuya, Firestore y las claves de Google simuladas. Firma tokens de verdad con un par de claves propio, así que la verificación que prueba es la real. `node pruebas/luces.mjs`, sin npm |
 | `comprador.html` | 2.3 | Catálogo (nombre + descripción, fotos ampliables), guía "¿Cómo comprar?", carrito, lote, propuesta, envío |
-| `interno/utils.js` | **1.11** | Núcleo: Firebase, auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, helpers |
+| `interno/utils.js` | **1.13** | Núcleo: Firebase, auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, teléfonos, **`PUENTE_LUCES` + `lucesEstado()` / `lucesMandar()`**, helpers |
 | `interno/design-system.css` | **1.1** | Estilos mobile-first |
 | `interno/documentos.html` | — | Libretas de propiedad: alta, listado y consulta. Exige el permiso `documentos`. **Faltaba en este inventario** hasta el 2026-09-07 |
 | `interno/diagnostico.html` | **2.2** | Prueba las conexiones reales del panel y **que las reglas estén publicadas**. Sin ítem en la barra y **sin depender del núcleo**: se abre escribiendo la dirección y carga aunque `utils.js` esté roto |
@@ -509,6 +540,7 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | `interno/llaves.html` | 1.2 | Crear y compartir llaves + historial de compras por comprador + ayuda |
 | `interno/pedidos.html` | 1.2 | Revisar / editar / validar / descartar; al validar inicializa `pago` y `entrega` sin pisar lo existente; ayuda |
 | `interno/ventas.html` | 2.2 | Post-venta completo: pagos parciales, `metodosPago`, entrega con historial, detalle de artículo, filtros, KPI Por cobrar, ayuda |
+| `interno/luces.html` | 1.0 | Las luces del depósito: estado real de cada una, encender y apagar, y los últimos veinte movimientos con quién y cuándo. Exige el permiso `luces` |
 | `interno/configuracion.html` | 1.2 | Contacto y textos públicos + gestión de usuarios + ayuda |
 | `interno/manifest.webmanifest` | 1.0 | PWA del panel: nombre, `start_url` `index.html`, `display: standalone`, colores `#f4f4f2` / `#b45309`, tres iconos (192, 512, maskable 512) |
 | `interno/sw.js` | 1.1 | Service worker: `skipWaiting`, limpieza de cachés viejos, y **network-first** con caída al caché solo para GET del mismo origen (Firebase y CDN siempre van a la red) |
@@ -516,7 +548,7 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | `interno/icons/*.png` `.webp` | 2.0 | `icon-512`, `icon-192`, `icon-maskable-512`, `apple-touch-icon` (180), `favicon-32`, `favicon-16`, `favicon.webp` (16) |
 | `interno/REMATETALLER-DOCUMENTACION.md` | — | Este archivo |
 
-Las ocho páginas de `interno/` incluyen, además del `<link>` de Material Icons: el
+Las nueve páginas de `interno/` incluyen, además del `<link>` de Material Icons: el
 `<link rel="manifest">`, el `<meta name="theme-color" content="#b45309">`, los tres links
 de icono y el registro del service worker al final del `<body>`.
 
@@ -1021,6 +1053,110 @@ el sistema por andando.
 >
 > **La lección, que vale más que las siete entradas:** un registro no se detiene con un
 > aviso. Se detiene en silencio, y lo que se rompe después no parece tener nada que ver.
+
+---
+
+## v0.5.18 — La luz del depósito, desde el teléfono (Tanda 25 · 9-sep-2026)
+
+> **Entrega:** `interno/luces.html` v1.0, `interno/utils.js` v1.13,
+> `firestore.rules` v0.7, `api/tuya.mjs` v1.0, `vercel.json`, `.env.example`,
+> `LUCES.md`, `pruebas/luces.mjs`, `CLAUDE.md`.
+>
+> **ACCIÓN MANUAL PENDIENTE — la tanda no está entregada hasta que esté hecha:**
+> 1. Publicar las **reglas v0.7** en la consola de Firebase (completas).
+> 2. Crear el proyecto de **Vercel** conectado a `rematetaller/remate` y cargar
+>    a mano las cinco variables de entorno. Después, **volver a desplegar**.
+> 3. Escribir la dirección resultante en `PUENTE_LUCES` (`interno/utils.js`).
+> 4. Tildar el permiso **Luces del depósito** a quien corresponda.
+>
+> El paso a paso, con lo que hay que mirar en cada consola, está en `LUCES.md`.
+
+Cuando alguien va a trabajar al depósito tiene que poder **prender la luz**. Las luces ya
+estaban conectadas a un dispositivo Tuya; lo que faltaba era el camino desde el teléfono.
+
+**Esta tanda le pone al proyecto su primera pieza de servidor, y conviene entender por qué
+no había alternativa.** La nube de Tuya exige que cada pedido vaya firmado con un secreto
+(HMAC-SHA256). Un secreto en el navegador no es un secreto: cualquiera que abra el código
+lo lee, y con él enciende y apaga las luces del depósito desde donde quiera. No hay forma
+de evitar el servidor. Lo que sí se pudo fue hacerlo **lo más chico posible**: una función,
+que no sabe nada del negocio y hace tres cosas — comprobar quién pide, comprobar que puede,
+y firmar.
+
+**El sitio no se mudó a Vercel.** GitHub Pages sigue publicando todo; Vercel sirve
+únicamente `/api/tuya`, y `vercel.json` redirige cualquier otra dirección de ese dominio
+al sitio real. Todo el resto del proyecto sigue siendo estático puro.
+
+### Quién puede encender, y por qué no hay una contraseña compartida
+
+La tentación era una clave en la función y la misma clave guardada en el teléfono. Habría
+funcionado, y habría sido **un modelo de acceso paralelo al que el proyecto ya tiene**: dos
+listas de quién puede hacer qué, que se desincronizan el día que alguien deja de trabajar
+acá y le sacan la cuenta pero no la clave.
+
+En vez de eso, el panel manda **el token de sesión de Firebase** de quien está mirando la
+pantalla, y el puente hace dos cosas distintas:
+
+| | Qué prueba | Cómo |
+|---|---|---|
+| **Autenticar** | *quién es* | verifica la firma RS256 del token contra las claves públicas de Google, más `aud`, `iss` y el vencimiento |
+| **Autorizar** | *qué puede* | lee `usuarios/{uid}` por la API REST de Firestore **usando ese mismo token**: `activo == true`, y `rol == 'admin'` o `permisos.luces == true` |
+
+Leer la ficha con el token de la persona —y no con una credencial de servidor— es la
+decisión que más importa de las dos. **La función no puede leer nada que esa persona no
+pudiera leer por su cuenta**, porque la lectura pasa por estas mismas reglas de Firestore.
+Un *service account* en Vercel habría sido una llave maestra de ventas, documentos y llaves
+de compradores **para prender una luz**.
+
+Y sigue valiendo §5.6: esconder el botón no protege nada. La barra oculta la sección a
+quien no tiene el permiso, y el que dice que no es el servidor.
+
+### La pantalla
+
+Cada luz es un botón grande —esto se toca en un depósito, con una mano y con poca luz, que
+es el motivo mismo de la pantalla— y muestra **lo que informó el aparato**, no lo que se
+pidió. Si alguien la apagó desde la llave de pared, acá se ve apagada. Tres estados y no
+dos: *encendida*, *apagada*, y **«no informó su estado»**, que no es lo mismo que apagada y
+no se dibuja igual. Aparte, *sin conexión* cuando el aparato no contesta.
+
+Después de mandar una orden, la pantalla **espera un momento y vuelve a preguntar**, porque
+el aparato tarda en informar el cambio y preguntarle enseguida devuelve el estado viejo.
+
+### El registro, que es la pregunta que aparece siempre
+
+Colección nueva `lucesRegistro`, con su bloque de reglas en la misma tanda (§5.3): quién
+encendió o apagó qué y cuándo. No es control — es para poder contestar *quién dejó la luz
+prendida el viernes*. Un movimiento **se agrega y no se edita**: `allow update: if false`.
+Y cada uno firma con su propio uid, que lo exige la regla: sin eso, cualquiera con el
+permiso podría anotar a nombre de otro y el registro dejaría de servir justamente para lo
+que existe.
+
+Si el registro falla, **la luz se prende igual** y se avisa. La luz es el trabajo; el
+registro es la memoria.
+
+### El banco de pruebas
+
+`node pruebas/luces.mjs` — 24 casos, sin npm y sin navegador, con la nube de Tuya,
+Firestore y las claves de Google simuladas. **Firma tokens de verdad con un par de claves
+generado en la propia prueba**, así que lo que se verifica es la verificación real y no una
+imitación. Entre los casos: token firmado con otra clave, vencido, de otro proyecto de
+Firebase, con el emisor cambiado, con una clave que Google no publica, y el ataque clásico
+`alg: none`. Además: cuenta desactivada, sesión sin permiso, admin sin el permiso tildado,
+y que ninguna respuesta de error repita el Access Secret ni el identificador de un aparato.
+
+### Lo que quedó afuera a propósito
+
+- **Control local.** Todo pasa por la nube: 200 a 600 ms. El camino local necesita la
+  *local key* de cada aparato y estar en la misma red — o sea, no serviría desde afuera,
+  que es justo cuando hace falta.
+- **Apagado automático.** Nadie apaga la luz a las 22:00. El registro sirve para verlo,
+  no para evitarlo.
+- **Horarios y escenas.** Eso lo hace la app de Tuya. Hacerlo dos veces en dos lugares es
+  la forma más segura de que no coincidan.
+
+> **Nota de dependencia, para que no sorprenda después:** `ORIGENES_PERMITIDOS` tiene la
+> dirección del sitio. Si algún día entra el dominio propio (§12.2), esa variable cambia
+> **en la misma tanda** o las luces dejan de responder — y el síntoma va a ser un error de
+> red en una pantalla, sin nada que lo relacione con el dominio.
 
 ---
 

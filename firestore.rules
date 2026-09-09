@@ -1,8 +1,20 @@
 // =====================================================
-// remateTaller — Reglas de Firestore v0.6 (7-ago-2026)
+// remateTaller — Reglas de Firestore v0.7 (9-sep-2026)
 // Se pegan COMPLETAS en la consola. Nunca por fragmentos.
 //
-// Cambios respecto de la v0.5:
+// Cambios respecto de la v0.6:
+//  0. Entra `lucesRegistro` con su bloque propio: quién encendió o apagó
+//     las luces del depósito y cuándo. Un movimiento es evidencia — se
+//     agrega y no se edita ni se borra desde el cliente. Cada uno firma
+//     con su propio uid: la regla no deja anotar en nombre de otro.
+//
+//     OJO: el permiso `luces` NO se aplica acá para encender la luz. La
+//     luz no vive en Firestore: la orden va a la nube de Tuya a través de
+//     la función `api/tuya.mjs`, que lee ESTA MISMA ficha de `usuarios`
+//     con el token de la persona y decide. Lo que esta regla protege es
+//     el registro, no el interruptor.
+//
+// Lo que trajo la v0.6 respecto de la v0.5:
 //  0. Entra `documentos` (libretas de propiedad) con su bloque propio.
 //     NO es de lectura pública, a diferencia del catálogo: tiene el
 //     nombre del titular —una persona ajena al negocio— y los números
@@ -180,6 +192,22 @@ service cloud.firestore {
     match /documentos/{id} {
       allow read: if puede('documentos');
       allow create, update: if puede('documentos');
+      allow delete: if esAdmin();
+    }
+
+    // ---------- Registro de las luces del depósito ----------
+    // Se anota desde `interno/luces.html` después de que la orden salió
+    // bien. Sirve para contestar la pregunta que aparece siempre: quién
+    // dejó la luz prendida.
+    match /lucesRegistro/{id} {
+      allow read: if puede('luces');
+      // Cada uno firma lo suyo: sin esto, cualquiera con el permiso podría
+      // anotar movimientos a nombre de otro, y el registro dejaría de
+      // servir justamente para lo que existe.
+      allow create: if puede('luces')
+        && request.resource.data.uid == request.auth.uid;
+      // Un movimiento no se corrige. Si quedó mal, queda mal y se ve.
+      allow update: if false;
       allow delete: if esAdmin();
     }
 
