@@ -2,12 +2,20 @@
 
 ## Qué es este proyecto
 
-Catálogo por invitación y panel interno de remateTaller. **Sitio estático puro:**
+Catálogo por invitación y panel interno de remateTaller. **Sitio estático:**
 HTML/CSS/JS servido tal cual, módulos ES por CDN, sin build, sin npm, sin
 `package.json`, sin frameworks. Despliegue por **GitHub Pages** desde
 `rematetaller/remate` — lo que se sube queda en vivo, sin etapa intermedia.
-**No hay funciones de servidor** y no hay workflows propios (no existe carpeta
-`.github/`).
+No hay workflows propios (no existe carpeta `.github/`).
+
+**Hay exactamente UNA función de servidor, desde el 2026-09-09** (tanda 25):
+`api/tuya.mjs`, desplegada en **Vercel** desde este mismo repositorio, que
+enciende y apaga las luces del depósito. Existe porque la nube de Tuya exige
+firmar cada pedido con un secreto (HMAC-SHA256), y un secreto en el navegador
+no es un secreto. **El sitio no se mudó a Vercel:** GitHub Pages sigue
+publicando todo, y Vercel sirve únicamente `/api/tuya` — cualquier otra
+dirección de ese dominio redirige al sitio real (`vercel.json`). Todo lo demás
+del proyecto sigue siendo estático puro. El detalle está en `LUCES.md`.
 
 > **Y no es un descuido, es una decisión.** El 2026-09-07 se agregó un
 > `.github/workflows/main.yml` con `anthropics/claude-code-action`, para intentar
@@ -52,11 +60,14 @@ ningún chat — de Mauro o de un agente. El historial de git es permanente: bor
 un archivo después no alcanza. Este proyecto documenta acá solo nombres, tipo y
 ubicación del valor real — nunca el valor.
 
-¿Usa variables de entorno? **No.** No hay funciones de servidor desplegadas ni
-workflows, así que no hay dónde cargarlas ni quién las lea. Si algún día
-aparecen las notificaciones por Netlify (EmailJS + CallMeBot, anotadas como
-pendiente en el § 12 de la documentación), esta tabla se completa **en la misma
-tanda** que la primera función.
+¿Usa variables de entorno? **Sí, desde el 2026-09-09** — las lee `api/tuya.mjs`
+en Vercel, y son las cinco primeras del proyecto. Hasta esa fecha la respuesta
+era «no», y era correcta: no había función que las leyera. Siguen sin existir
+GitHub Secrets, porque sigue sin haber workflows que los consuman.
+
+Las notificaciones por Netlify (EmailJS + CallMeBot, § 12 de la documentación)
+siguen pendientes, y si algún día entran, sus variables se agregan a esta tabla
+**en la misma tanda** que su función.
 
 | Variable | Qué hace | Tipo | Dónde vive el valor real | Consumida por | Verificado |
 |---|---|---|---|---|---|
@@ -66,11 +77,19 @@ tanda** que la primera función.
 | Contraseña de cada administrador | Login a `interno/login.html` | dato en runtime | Firebase Authentication. **No se comparten entre personas**: se entra por "Recuperar contraseña", que manda el mail de Firebase | `signInWithEmailAndPassword` en `utils.js` | leído del repo, 2026-09-07 |
 | `usuarios/{uid}` → `rol`, `activo`, `permisos` | Quién entra y qué puede hacer | dato en runtime | Firestore, protegido por las reglas publicadas en la consola | `configuracion.html`, `utils.js` | leído del repo, 2026-09-07 |
 | `llaves/{codigo}` | La llave del comprador **es la credencial** | dato en runtime | Firestore. El `get` por código está abierto a propósito; **listar llaves sin sesión está cerrado** — sería entregar todas las credenciales de una | `index.html`, `comprador.html`, `interno/llaves.html` | doc § 5.1, 2026-09-07 |
+| `TUYA_CLIENT_ID` | Access ID de la app de Tuya IoT Platform; identifica la aplicación al firmar | secreto de infraestructura | Vercel → proyecto de remate → Settings → Environment Variables | `api/tuya.mjs` | `api/tuya.mjs:60`, 2026-09-09 |
+| `TUYA_CLIENT_SECRET` | Access Secret: la clave con la que se firma cada pedido a Tuya (HMAC-SHA256) | secreto de infraestructura | Vercel → mismo proyecto → Environment Variables | `api/tuya.mjs` | `api/tuya.mjs:61`, 2026-09-09 |
+| `TUYA_REGION` | Centro de datos de Tuya: `us`/`eu`/`cn`/`in` (por defecto `us`) | configuración, no secreto | Vercel → mismo proyecto | `api/tuya.mjs` | `api/tuya.mjs:65`, 2026-09-09 |
+| `TUYA_LUCES` | JSON alias → identificador del aparato, etiqueta y comando. El panel manda el **alias**; el identificador real no sale del servidor | configuración con datos internos | Vercel → mismo proyecto | `api/tuya.mjs` | `api/tuya.mjs:70`, 2026-09-09 |
+| `ORIGENES_PERMITIDOS` | Desde qué direcciones se acepta un pedido (CORS). Lista blanca: un `*` acá dejaría que cualquier página del mundo usara la sesión de quien la visite | configuración de seguridad | Vercel → mismo proyecto. Por defecto `https://rematetaller.github.io` | `api/tuya.mjs` | `api/tuya.mjs:90`, 2026-09-09 |
+| `PUENTE_LUCES` | La dirección de la función. **No es un secreto** —sin un token de Firebase válido no hace nada— y por eso vive en el código, no en el entorno | público por diseño | `interno/utils.js`, una sola línea. Se edita a mano al crear el proyecto en Vercel | `luces.html` vía `utils.js` | `interno/utils.js:148`, 2026-09-09 |
+| Credencial de servidor de Firebase (*service account*) | Le permitiría a la función leer toda la base | **ausente por diseño** | No existe. La función lee `usuarios/{uid}` con el token de la propia persona, así que no puede leer nada que ella no pudiera leer. Un service account sería una llave maestra de ventas, documentos y llaves para prender una luz | Nadie | ausencia confirmada en todo el repo, 2026-09-09 |
 | Reglas de Firestore | Autoridad real de acceso | configuración de seguridad (copia en repo, autoridad en consola) | La autoridad sigue siendo lo publicado en la **consola de Firebase**. La copia vive en `/firestore.rules` (raíz), **v0.6**, creada el 2026-09-07 con el texto real de la consola | Firestore | copiado de la consola por Mauro, 2026-09-07 |
 
 Lo que NO está acá y no tiene que estar: el `api_secret` de Cloudinary, las
-contraseñas de los administradores, y cualquier clave de terceros futura (esas
-irían a variables de entorno de Netlify, nunca al repo).
+contraseñas de los administradores, el Access Secret de Tuya, ningún `.env`
+(el `.gitignore` lo bloquea, salvo `.env.example`, que sólo tiene nombres) y
+cualquier clave de terceros futura.
 
 **Ojo, dato que conviene saber:** los mails y los `uid` de los dos
 administradores están publicados, en `interno/utils.js` (mapa
@@ -146,6 +165,15 @@ verdad después del cambio.
   en un módulo ES deja la página en blanco, sin nada que explique por qué.
 - **Material Icons antes de `design-system.css`** en el `<head>` (§ 3.14).
 - La PWA es **del panel**, no del catálogo público (§ 3.17).
+- **Las luces son la única pieza con servidor.** El panel manda un alias y su
+  token de sesión; `api/tuya.mjs` verifica el token, lee `usuarios/{uid}` con
+  *ese mismo token* y recién ahí firma contra Tuya. Nada de credenciales del
+  lado del cliente, y nada de credenciales de servidor de Firebase del lado del
+  puente. Ver `LUCES.md`.
+- **Antes de subir se corre `node pruebas/luces.mjs`** (24 casos, sin npm), y
+  se comprueba que parsee el JavaScript que vive adentro de los `.html`.
+- **Si el sitio pasa a dominio propio** (§ 12.2), `ORIGENES_PERMITIDOS` cambia
+  en la misma tanda o las luces dejan de responder sin aviso.
 
 ## Protocolos
 

@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.12)
+// utils.js — Núcleo compartido de remateTaller (v1.13)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 //
@@ -12,6 +12,16 @@
 // y mientras tanto el inventario derivó y las reglas quedaron dos
 // versiones atrás sin que nada avisara. Si volvés a anotar un cambio
 // acá, anotalo también allá, en la misma tanda.
+//
+// v1.13 (tanda 25):
+//  · LUCES DEL DEPÓSITO. Permiso `luces`, su ítem de navegación, y las dos
+//    llamadas al puente: `lucesEstado()` y `lucesMandar()`. Viven en el
+//    núcleo porque las usan dos pantallas —`luces.html` y el acceso rápido
+//    del panel—, y porque el token de sesión se pide en UN solo lugar.
+//  · `PUENTE_LUCES`: la dirección de la función de Vercel. Es la PRIMERA
+//    pieza de servidor del proyecto, y la única. No es un secreto —la
+//    función exige un token de Firebase válido— pero sí es lo único que
+//    hay que editar a mano cuando se crea el proyecto en Vercel.
 //
 // v1.12 (tanda 24):
 //  · Teléfonos: `telVisible()` y `urlWhatsapp()`. Un teléfono se GUARDA y se
@@ -125,6 +135,18 @@ export const CLOUDINARY = {
   preset: "preset-remate" // unsigned preset — crearlo en Cloudinary si no existe
 };
 
+// ---------- El puente a las luces (Tuya) ----------
+// La dirección de la única función de servidor del proyecto, desplegada en
+// Vercel desde la carpeta `api/` de este mismo repositorio. NO es un
+// secreto: la función no hace nada sin un token de Firebase válido de una
+// cuenta activa con el permiso `luces`. Las credenciales de Tuya viven
+// enteras del otro lado, en las variables de entorno de Vercel.
+//
+// ES LO ÚNICO QUE HAY QUE EDITAR A MANO al crear el proyecto en Vercel.
+// Vacío = la pantalla de luces lo dice y explica qué falta, en vez de
+// fallar con un error de red que no significa nada. Ver LUCES.md.
+export const PUENTE_LUCES = "";
+
 // =====================================================
 // AUTENTICACIÓN Y CONTROL DE ACCESO (admins)
 // =====================================================
@@ -168,13 +190,18 @@ export const PERMISOS = [
     id: "validar", label: "Precios y validación", icono: "price_check",
     detalle: "Poner precios, tasar lo pendiente y pasar un pedido a venta. " +
       "Es el acuerdo económico."
+  },
+  {
+    id: "luces", label: "Luces del depósito", icono: "lightbulb",
+    detalle: "Encender y apagar las luces del depósito desde el teléfono. " +
+      "No mueve plata ni stock: es para poder trabajar."
   }
 ];
 
 // Combinaciones típicas, para que dar de alta sea un toque y no cinco.
 export const PRESETS = [
-  { id: "ayudante", label: "Ayudante", permisos: ["inventario", "cobros", "entregas"] },
-  { id: "gestion",  label: "Gestión",  permisos: ["inventario", "cobros", "entregas", "llaves", "validar", "documentos"] }
+  { id: "ayudante", label: "Ayudante", permisos: ["inventario", "cobros", "entregas", "luces"] },
+  { id: "gestion",  label: "Gestión",  permisos: ["inventario", "cobros", "entregas", "llaves", "validar", "documentos", "luces"] }
 ];
 
 /** El rol 'admin' puede todo, y además usuarios, textos públicos y borrados. */
@@ -402,6 +429,7 @@ const NAV_ITEMS = [
   { id: "pedidos",       label: "Pedidos",    icon: "shopping_cart", href: "pedidos.html",       permiso: "validar" },
   { id: "ventas",        label: "Ventas",     icon: "receipt_long",  href: "ventas.html",        permiso: ["cobros", "entregas", "validar"] },
   { id: "documentos",    label: "Documentos", icon: "description",   href: "documentos.html",    permiso: "documentos" },
+  { id: "luces",         label: "Luces",      icon: "lightbulb",     href: "luces.html",         permiso: "luces" },
   { id: "configuracion", label: "Config.",    icon: "settings",      href: "configuracion.html", soloAdmin: true }
 ];
 
@@ -976,4 +1004,79 @@ export function toast(mensaje, tipo = "ok") {
   t.textContent = mensaje;
   t.className = "toast " + tipo + " visible";
   setTimeout(() => t.classList.remove("visible"), 3500);
+}
+
+// =====================================================
+// LAS LUCES DEL DEPÓSITO
+// =====================================================
+// Las dos únicas llamadas del sistema a algo que no sea Firebase o
+// Cloudinary. Viven acá y no en la pantalla porque las usan dos lugares
+// —`luces.html` y el acceso rápido del panel— y sobre todo porque el token
+// de sesión se pide en UN solo sitio: si mañana cambia cómo se autentica,
+// cambia acá y en ningún otro lado (§3.2).
+//
+// El token lo emite Firebase, dura una hora y se renueva solo. No es una
+// contraseña que alguien tenga que saber ni compartir: es la sesión que ya
+// tiene abierta quien está mirando el panel.
+
+/** Mensaje único para cuando falta configurar el puente. */
+const SIN_PUENTE = "Falta configurar la dirección del puente de luces " +
+  "(PUENTE_LUCES en utils.js). Ver LUCES.md.";
+
+async function llamarPuente(opciones = {}) {
+  if (!PUENTE_LUCES) return { ok: false, motivo: SIN_PUENTE, sinConfigurar: true };
+  const u = auth.currentUser;
+  if (!u) return { ok: false, motivo: "No hay sesión abierta." };
+
+  let token;
+  try {
+    token = await u.getIdToken();
+  } catch (e) {
+    return { ok: false, motivo: "No se pudo renovar la sesión. Probá salir y volver a entrar." };
+  }
+
+  // Un corte corto a propósito: si la nube de Tuya se queda pensando, la
+  // pantalla tiene que poder decirlo, no quedarse girando para siempre.
+  const corte = new AbortController();
+  const reloj = setTimeout(() => corte.abort(), 12000);
+  try {
+    const r = await fetch(PUENTE_LUCES, {
+      method: opciones.metodo || "GET",
+      headers: Object.assign(
+        { Authorization: "Bearer " + token },
+        opciones.cuerpo ? { "Content-Type": "application/json" } : {}
+      ),
+      body: opciones.cuerpo ? JSON.stringify(opciones.cuerpo) : undefined,
+      signal: corte.signal
+    });
+    const datos = await r.json().catch(() => ({}));
+    if (!r.ok || datos.ok === false) {
+      return { ok: false, motivo: datos.motivo || ("El puente respondió " + r.status), estado: r.status };
+    }
+    return datos;
+  } catch (e) {
+    return {
+      ok: false,
+      motivo: e.name === "AbortError"
+        ? "El puente no contestó a tiempo."
+        : "No se pudo llegar al puente. ¿Hay internet?"
+    };
+  } finally {
+    clearTimeout(reloj);
+  }
+}
+
+/**
+ * Qué luces hay y cómo están ahora mismo.
+ * → { ok:true, luces:[{ alias, label, encendida, enLinea }] }
+ * `encendida: null` significa que el aparato no informó su estado — que no
+ * es lo mismo que "apagada", y la pantalla no debe dibujarlo igual.
+ */
+export function lucesEstado() {
+  return llamarPuente({ metodo: "GET" });
+}
+
+/** Encender o apagar una luz. → { ok:true, luz, label, encendida } */
+export function lucesMandar(alias, encender) {
+  return llamarPuente({ metodo: "POST", cuerpo: { luz: alias, encender: !!encender } });
 }

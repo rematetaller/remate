@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "https://rematetaller.github.io/remate/",
+      "permanent": false
+    }
+  ]
+}

@@ -7,3 +7,4 @@
 firebase-adminsdk*.json
 .firebase/
 .firebaserc
+.vercel

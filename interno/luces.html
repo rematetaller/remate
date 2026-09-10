@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Luces — remateTaller</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+<link rel="stylesheet" href="design-system.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#b45309">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+/* Botones grandes a propósito: esto se toca en un depósito, con una mano,
+   a veces con la otra ocupada y casi siempre con poca luz — que es el
+   motivo mismo de la pantalla. */
+.luz {
+  display:flex; align-items:center; gap:14px; width:100%;
+  padding:18px 16px; margin-bottom:10px;
+  border:2px solid #d8d5cd; border-radius:14px;
+  background:#fff; text-align:left; cursor:pointer;
+  font:inherit; color:inherit;
+}
+.luz:disabled { opacity:.55; cursor:default; }
+.luz .material-icons { font-size:38px; color:#b8b4ab; }
+.luz .txt { flex:1; }
+.luz .nombre { font-size:18px; font-weight:600; }
+.luz .estado { font-size:13px; color:#6b6b6b; margin-top:2px; }
+.luz.encendida { border-color:#f1b302; background:#fffbe9; }
+.luz.encendida .material-icons { color:#f1b302; }
+.luz.sin-linea { border-style:dashed; }
+.luz.sin-linea .estado { color:#b45309; }
+
+.aviso {
+  border-left:4px solid #b45309; background:#fff7ed;
+  padding:12px 14px; border-radius:0 10px 10px 0; margin-bottom:14px;
+}
+.aviso p { margin:0 0 6px; }
+.aviso p:last-child { margin-bottom:0; }
+.aviso code { background:#f4f4f2; padding:1px 5px; border-radius:4px; font-size:.9em; }
+
+.registro { list-style:none; padding:0; margin:0; }
+.registro li {
+  display:flex; gap:10px; align-items:baseline;
+  padding:8px 0; border-bottom:1px solid #eeece7; font-size:14px;
+}
+.registro li:last-child { border-bottom:none; }
+.registro .cuando { color:#8a8a8a; font-size:12px; white-space:nowrap; }
+.registro .quien { font-weight:600; }
+.punto { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.punto.on { background:#f1b302; }
+.punto.off { background:#c3c0b8; }
+</style>
+</head>
+<body>
+
+<header id="topbar"></header>
+
+<main>
+  <h1>Luces</h1>
+
+  <div id="avisos"></div>
+
+  <div id="luces">
+    <p class="texto-suave">Preguntando cómo están las luces…</p>
+  </div>
+
+  <div class="fila" style="margin:14px 0;">
+    <button class="btn" id="btnRefrescar">
+      <span class="material-icons" style="font-size:18px; vertical-align:-4px;">refresh</span>
+      Volver a preguntar
+    </button>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Últimos movimientos</h2>
+    <ul class="registro" id="registro">
+      <li class="texto-suave">Cargando…</li>
+    </ul>
+  </div>
+</main>
+
+<script type="module">
+import {
+  verificarAuth, renderNav, db, toast, iniciarAyuda, escapar,
+  exigirPermiso, usuario, lucesEstado, lucesMandar, PUENTE_LUCES,
+  collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp
+} from "./utils.js";
+
+verificarAuth(async () => {
+  renderNav("luces");
+  if (!exigirPermiso("luces")) return;
+
+  iniciarAyuda("Las luces del depósito", `
+<p>Las luces del depósito están conectadas a un dispositivo Tuya. Desde acá se prenden y se apagan sin estar al lado de la llave.</p>
+<h3>Lo que dice cada tarjeta</h3>
+<ul>
+<li><strong>Encendida</strong> o <strong>Apagada</strong>: es lo que informó el aparato hace un momento, no lo que se pidió. Si alguien la apagó desde la llave de pared, acá se ve apagada.</li>
+<li><strong>No informó su estado</strong>: el aparato contestó, pero sin decir si está prendida. Se puede mandar la orden igual.</li>
+<li><strong>Sin conexión</strong>: el aparato no contestó. Puede estar sin corriente o sin wifi. Mandar la orden probablemente no haga nada.</li>
+</ul>
+<h3>Por qué tarda un segundo</h3>
+<p>La orden va del teléfono a la nube de Tuya y de ahí al aparato. Es normal que pase entre medio segundo y dos. Después de mandarla, la pantalla vuelve a preguntar sola para mostrar lo que quedó de verdad — no lo que se pidió.</p>
+<h3>Los movimientos</h3>
+<p>Cada orden queda registrada con quién la mandó y cuándo. No es control: es para poder contestar la pregunta que aparece siempre, que es <em>quién dejó la luz prendida el viernes</em>.</p>
+<h3>Quién puede</h3>
+<p>Hace falta el permiso <strong>Luces del depósito</strong>. Lo habilita un administrador desde Configuración, y quien lo aplica de verdad no es esta pantalla sino el servidor: esconder un botón no protege nada.</p>
+`);
+
+  if (!PUENTE_LUCES) {
+    // Sin puente configurado no tiene sentido pedir nada: se dice qué falta
+    // y quién puede resolverlo, en vez de dejar un error de red que no
+    // significa nada para quien lo lee.
+    document.getElementById("avisos").innerHTML =
+      '<div class="aviso">' +
+      "<p><strong>Todavía no está conectado el puente de las luces.</strong></p>" +
+      "<p>Falta cargar la dirección de la función en <code>PUENTE_LUCES</code>, " +
+      "dentro de <code>interno/utils.js</code>. El paso a paso está en " +
+      "<code>LUCES.md</code>, en la raíz del repositorio.</p>" +
+      "</div>";
+    document.getElementById("luces").innerHTML = "";
+    document.getElementById("btnRefrescar").disabled = true;
+    cargarRegistro();
+    return;
+  }
+
+  document.getElementById("btnRefrescar").addEventListener("click", refrescar);
+  await refrescar();
+  await cargarRegistro();
+});
+
+let ocupado = false;
+
+async function refrescar() {
+  const cont = document.getElementById("luces");
+  const avisos = document.getElementById("avisos");
+  const r = await lucesEstado();
+
+  if (!r.ok) {
+    avisos.innerHTML = '<div class="aviso"><p><strong>No se pudo consultar.</strong></p><p>' +
+      escapar(r.motivo || "Error desconocido") + "</p></div>";
+    cont.innerHTML = "";
+    return;
+  }
+  avisos.innerHTML = "";
+
+  if (!r.luces || !r.luces.length) {
+    cont.innerHTML = '<p class="texto-suave">No hay ninguna luz configurada todavía. ' +
+      "Se cargan en la variable <code>TUYA_LUCES</code> de Vercel (ver <code>LUCES.md</code>).</p>";
+    return;
+  }
+
+  cont.innerHTML = r.luces.map(pintarLuz).join("");
+  cont.querySelectorAll("[data-alias]").forEach((b) => {
+    b.addEventListener("click", () => alternar(b.dataset.alias, b.dataset.encendida !== "true"));
+  });
+}
+
+function pintarLuz(l) {
+  const encendida = l.encendida === true;
+  const clases = ["luz"];
+  if (encendida) clases.push("encendida");
+  if (l.enLinea === false) clases.push("sin-linea");
+
+  let estado;
+  if (l.enLinea === false) estado = "Sin conexión — puede que la orden no llegue";
+  else if (l.encendida === null) estado = "No informó su estado";
+  else estado = encendida ? "Encendida · tocá para apagar" : "Apagada · tocá para encender";
+
+  return '<button class="' + clases.join(" ") + '" data-alias="' + escapar(l.alias) +
+    '" data-encendida="' + encendida + '">' +
+    '<span class="material-icons">' + (encendida ? "lightbulb" : "lightbulb_outline") + "</span>" +
+    '<span class="txt"><span class="nombre">' + escapar(l.label || l.alias) + "</span>" +
+    '<span class="estado" style="display:block;">' + escapar(estado) + "</span></span>" +
+    "</button>";
+}
+
+async function alternar(alias, encender) {
+  if (ocupado) return;
+  ocupado = true;
+  document.querySelectorAll(".luz").forEach((b) => { b.disabled = true; });
+
+  const r = await lucesMandar(alias, encender);
+  if (!r.ok) {
+    toast(r.motivo || "No se pudo mandar la orden", "error");
+    ocupado = false;
+    await refrescar();
+    return;
+  }
+
+  toast((r.label || alias) + (encender ? " encendida" : " apagada"));
+  await anotar(r);
+
+  // El aparato tarda en informar el cambio: preguntarle enseguida devuelve
+  // el estado viejo y la pantalla parpadearía al revés. Se le da un momento
+  // y recién ahí se vuelve a preguntar — y lo que se muestra es lo que
+  // contestó el aparato, nunca lo que se pidió.
+  setTimeout(async () => {
+    ocupado = false;
+    await refrescar();
+    await cargarRegistro();
+  }, 1500);
+}
+
+/** Un movimiento es evidencia: se agrega, no se edita ni se borra. */
+async function anotar(r) {
+  try {
+    const u = usuario() || {};
+    await addDoc(collection(db, "lucesRegistro"), {
+      uid: u.uid || "",
+      nombre: u.nombre || u.email || "",
+      luz: r.luz || "",
+      label: r.label || "",
+      encendida: !!r.encendida,
+      cuando: serverTimestamp()
+    });
+  } catch (e) {
+    // Que no se pueda anotar no puede impedir que la luz se prenda: se
+    // avisa y se sigue. La luz es el trabajo; el registro es la memoria.
+    toast("La luz respondió, pero no se pudo anotar el movimiento", "error");
+  }
+}
+
+async function cargarRegistro() {
+  const ul = document.getElementById("registro");
+  try {
+    const snap = await getDocs(
+      query(collection(db, "lucesRegistro"), orderBy("cuando", "desc"), limit(20))
+    );
+    if (snap.empty) {
+      ul.innerHTML = '<li class="texto-suave">Todavía no hay movimientos.</li>';
+      return;
+    }
+    const filas = [];
+    snap.forEach((d) => {
+      const x = d.data();
+      const f = x.cuando && x.cuando.toDate ? x.cuando.toDate() : null;
+      filas.push(
+        "<li>" +
+          '<span class="punto ' + (x.encendida ? "on" : "off") + '"></span>' +
+          '<span style="flex:1;"><span class="quien">' + escapar(x.nombre || "—") + "</span> " +
+          (x.encendida ? "encendió" : "apagó") + " " + escapar(x.label || x.luz || "") + "</span>" +
+          '<span class="cuando">' + (f ? fechaCorta(f) : "") + "</span>" +
+        "</li>"
+      );
+    });
+    ul.innerHTML = filas.join("");
+  } catch (e) {
+    ul.innerHTML = '<li class="texto-suave">No se pudo leer el registro.</li>';
+  }
+}
+
+/** "hoy 19:40" dice más que una fecha completa cuando lo que importa es
+    si la luz quedó prendida anoche. */
+function fechaCorta(f) {
+  const hoy = new Date();
+  const mismoDia = f.toDateString() === hoy.toDateString();
+  const hora = String(f.getHours()).padStart(2, "0") + ":" + String(f.getMinutes()).padStart(2, "0");
+  if (mismoDia) return "hoy " + hora;
+  const ayer = new Date(hoy); ayer.setDate(hoy.getDate() - 1);
+  if (f.toDateString() === ayer.toDateString()) return "ayer " + hora;
+  return String(f.getDate()).padStart(2, "0") + "/" +
+    String(f.getMonth() + 1).padStart(2, "0") + " " + hora;
+}
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
+}
+</script>
+</body>
+</html>
