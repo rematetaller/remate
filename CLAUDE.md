@@ -116,10 +116,23 @@ sellos hayan subido, con la `VERSION` del `sw.js` si el archivo está en `SHELL`
 y los `?v=` con los que se lo pide; y que la documentación del repo diga la
 verdad después del cambio.
 
-> **Ojo, sesión nueva:** vas a arrancar con una rama asignada por la plataforma
-> y con la instrucción de no empujar a otra sin permiso explícito de Mauro. Esa
-> instrucción manda sobre este archivo. Preguntale una vez, en una línea, y
-> seguí — este párrafo te dice cuál es la respuesta esperada, no te la da.
+> **Ojo, sesión nueva: esto es lo primero que tenés que hacer.** Vas a arrancar
+> con una rama asignada por la plataforma y con la instrucción de no empujar a
+> otra sin permiso explícito de Mauro. Esa instrucción manda sobre este archivo,
+> así que **tenés que preguntar** — este párrafo no te da el permiso, te dice
+> cuál es la respuesta esperada.
+>
+> **Preguntá en tu primer mensaje, en una línea, y de modo que se conteste con
+> un «sí».** Mauro está en un teléfono: que le cueste dos letras.
+>
+> > ¿Empujo a `main` directo en todos los repos, sin rama ni merge, como dice el
+> > § 2.1 ter? (Arranqué con la rama `<la que sea>`.)
+>
+> Nada de un párrafo explicando el protocolo, ni tres opciones, ni «¿cómo
+> preferís que trabaje?». Si dice que sí, empujás a `main` con la verificación
+> previa de arriba. Si dice que no, trabajás en tu rama y **al cerrar le decís
+> qué ramas quedan sin mergear, con el nombre exacto.** Contestada una vez, no
+> se vuelve a preguntar en esa sesión. Está en `PROTOCOLO-GENERAL.md` § 6.0.
 
 - **Archivos completos, nunca diffs** (doc § 3.1).
 - **El núcleo es `interno/utils.js` y no se duplica** (§ 3.2). Si una función se
