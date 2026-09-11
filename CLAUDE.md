@@ -84,7 +84,8 @@ siguen pendientes, y si algún día entran, sus variables se agregan a esta tabl
 | `ORIGENES_PERMITIDOS` | Desde qué direcciones se acepta un pedido (CORS). Lista blanca: un `*` acá dejaría que cualquier página del mundo usara la sesión de quien la visite | configuración de seguridad | Vercel → mismo proyecto. Por defecto `https://rematetaller.github.io` | `api/tuya.mjs` | `api/tuya.mjs:90`, 2026-09-09 |
 | `PUENTE_LUCES` | La dirección de la función. **No es un secreto** —sin un token de Firebase válido no hace nada— y por eso vive en el código, no en el entorno | público por diseño | `interno/utils.js`, una sola línea. Se edita a mano al crear el proyecto en Vercel | `luces.html` vía `utils.js` | `interno/utils.js:148`, 2026-09-09 |
 | Credencial de servidor de Firebase (*service account*) | Le permitiría a la función leer toda la base | **ausente por diseño** | No existe. La función lee `usuarios/{uid}` con el token de la propia persona, así que no puede leer nada que ella no pudiera leer. Un service account sería una llave maestra de ventas, documentos y llaves para prender una luz | Nadie | ausencia confirmada en todo el repo, 2026-09-09 |
-| Reglas de Firestore | Autoridad real de acceso | configuración de seguridad (copia en repo, autoridad en consola) | La autoridad sigue siendo lo publicado en la **consola de Firebase**. La copia vive en `/firestore.rules` (raíz), **v0.6**, creada el 2026-09-07 con el texto real de la consola | Firestore | copiado de la consola por Mauro, 2026-09-07 |
+| Reglas de Firestore | Autoridad real de acceso | configuración de seguridad (copia en repo, autoridad en consola) | La autoridad sigue siendo lo publicado en la **consola de Firebase**. La copia vive en `/firestore.rules` (raíz), **v0.8** (2026-09-11) | Firestore | v0.8 escrita en el repo, 2026-09-11 — **falta pegarla en la consola** |
+| Usuario del agente de Claude Code | Deja que un chat LEA la base para compararla con el código publicado. No escribe, y no lee `llaves` ni `documentos` | dato en runtime | Firebase Authentication de `remate-acbc9`. La contraseña vive en las variables de entorno de Claude Code, cargadas por Mauro. **No tiene ficha en `usuarios/`**: su acceso sale del bloque `esAgente()` de las reglas, y de ningún otro lado | `datos/herramientas/firestore.mjs`, proyecto `remate` | UID verificado contra la base, 2026-09-11 |
 
 Lo que NO está acá y no tiene que estar: el `api_secret` de Cloudinary, las
 contraseñas de los administradores, el Access Secret de Tuya, ningún `.env`
@@ -159,6 +160,12 @@ verdad después del cambio.
 - **Una colección nueva entra con su regla de Firestore, en la misma tanda**
   (§ 5.3). Rige el deny por defecto: sin bloque propio, queda inaccesible.
 - **Las reglas se editan completas, nunca por fragmentos** (§ 5.2).
+- **El agente de Claude Code lee la base, y lo que no lee está en dos lugares.**
+  `llaves` y `documentos` quedan afuera: la llave es la credencial del comprador
+  y los documentos son datos de terceros. Esa lista está escrita en el bloque
+  `esAgente()` de `firestore.rules` **y** en `selladas` del proyecto `remate` en
+  `datos/herramientas/firestore.mjs`. Si cambia una, cambia la otra en la misma
+  tanda: el archivo da el mensaje claro, la regla da la garantía.
 - **Cada moneda es un sistema aparte:** UYU y USD nunca se suman (§ 1.3, § 3.8).
 - **Los derivados no se guardan:** el estado de pago se calcula al leer (§ 3.5).
 - **Se valida que el JS parsea antes de entregar** (§ 3.15): un error de sintaxis

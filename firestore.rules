@@ -1,8 +1,29 @@
 // =====================================================
-// remateTaller — Reglas de Firestore v0.7 (9-sep-2026)
+// remateTaller — Reglas de Firestore v0.8 (11-sep-2026)
 // Se pegan COMPLETAS en la consola. Nunca por fragmentos.
 //
-// Cambios respecto de la v0.6:
+// Cambios respecto de la v0.7:
+//  0. Entra el AGENTE DE CLAUDE CODE, con lectura y una bóveda.
+//     Es un usuario común de Authentication —no una cuenta de servicio,
+//     que saltearía estas reglas enteras— y existe para que un chat pueda
+//     comparar lo que hay en la base con lo que dice el código publicado.
+//
+//     Lee todo MENOS `llaves` y `documentos`. La llave es la credencial
+//     del comprador; los documentos son datos de personas ajenas al
+//     negocio. Y no escribe nada: para eso tendría que entrar acá otra
+//     regla, en la misma tanda que el código que la necesite.
+//
+//     NO tiene ficha en `usuarios/`, a propósito: no es del equipo, no
+//     tiene rol ni permisos, y no aparece en la pantalla de usuarios.
+//     Su acceso sale de este bloque y nada más.
+//
+//     La regla compara el UID y no el mail: Firebase deja que cualquiera
+//     se registre con mail y contraseña, así que una regla que abre la
+//     base «a quien tenga tal mail» se la abre a quien consiga registrar
+//     ese mail primero. El UID lo asigna Firebase y no se puede elegir.
+//     Es distinto en cada proyecto aunque la cuenta sea la misma.
+//
+// Lo que trajo la v0.7 respecto de la v0.6:
 //  0. Entra `lucesRegistro` con su bloque propio: quién encendió o apagó
 //     las luces del depósito y cuándo. Un movimiento es evidencia — se
 //     agrega y no se edita ni se borra desde el cliente. Cada uno firma
@@ -92,6 +113,21 @@ service cloud.firestore {
 
     function cambios() {
       return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // ---------- El agente de Claude Code ----------
+    // Ver la nota de la v0.8 arriba. Lectura sola, y con dos colecciones
+    // afuera. La lista de abajo tiene que decir lo mismo que `selladas` del
+    // proyecto `remate` en datos/herramientas/firestore.mjs: el archivo da
+    // el mensaje claro, ESTA REGLA da la garantía. Si cambia una, cambia la
+    // otra en la misma tanda.
+    function esAgente() {
+      return request.auth != null
+        && request.auth.uid == 't8rJ1U3DTkUFve4jH5cuR0Zq1Sk2';
+    }
+
+    match /{coleccion}/{resto=**} {
+      allow read: if esAgente() && !(coleccion in ['llaves', 'documentos']);
     }
 
     // ---------- Usuarios: el documento que manda ----------
