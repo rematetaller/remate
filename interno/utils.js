@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.13)
+// utils.js — Núcleo compartido de remateTaller (v1.14)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 //
@@ -12,6 +12,20 @@
 // y mientras tanto el inventario derivó y las reglas quedaron dos
 // versiones atrás sin que nada avisara. Si volvés a anotar un cambio
 // acá, anotalo también allá, en la misma tanda.
+//
+// v1.14 (tanda 26):
+//  · LA NAVEGACIÓN BAJA, AL ALCANCE DEL PULGAR. Pedido de Mauro: en los
+//    otros dos paneles de administración la barra ya está abajo, y acá
+//    estaba arriba, en el rincón más lejos de la mano que sostiene el
+//    teléfono. `renderNav()` deja arriba sólo la marca y la cuenta, y crea
+//    la barra al borde inferior. Los ocho ítems se siguen viendo todos, en
+//    dos filas: la decisión de la v1.1 no se toca.
+//  · `medirBarra()` escribe en `--rt-piso` lo que la barra tapa de verdad,
+//    midiéndola. No es un lujo: un administrador ve ocho ítems y un cobrador
+//    ve tres, así que el alto NO es un número que se pueda escribir en el
+//    CSS. Lo usan el hueco del body y el toast, que si no quedaba tapado.
+//    Es el `--cv-piso` de Casa Verde, que ya cometió y corrigió este error.
+//  · Ninguna página se toca: las ocho ya llamaban a `renderNav()`.
 //
 // v1.13 (tanda 25):
 //  · LUCES DEL DEPÓSITO. Permiso `luces`, su ítem de navegación, y las dos
@@ -433,29 +447,85 @@ const NAV_ITEMS = [
   { id: "configuracion", label: "Config.",    icon: "settings",      href: "configuracion.html", soloAdmin: true }
 ];
 
+/**
+ * LA NAVEGACIÓN VA ABAJO, AL ALCANCE DEL PULGAR (pedido de Mauro, 2026-09-11).
+ *
+ * Arriba queda la marca y el botón de la cuenta; los ítems se van a una barra
+ * fija al borde inferior, que es donde la mano ya está agarrando el teléfono.
+ * Es el mismo diseño que ya usan Casa Verde (`.cv-barra`) y el panel (`#nav`),
+ * y es de las cosas que el ecosistema se presta entre sitios.
+ *
+ * Los ocho ítems siguen viéndose TODOS, envolviendo en dos filas: la decisión
+ * de la v1.1 no se toca. Scrolleaban horizontal hasta entonces y lo que pasaba
+ * del quinto quedaba fuera de pantalla — primero "Salir", después "Documentos".
+ * Un acceso que no se ve no existe, y uno que no se alcanza tampoco.
+ *
+ * La barra la crea esta función, no el HTML: las ocho páginas ya llaman acá,
+ * así que ninguna hay que tocarla. Si mañana entra una página nueva, hereda la
+ * barra por llamar a `renderNav()` y por nada más.
+ */
 export function renderNav(actual) {
   const el = document.getElementById("topbar");
   if (!el) return;
   asegurarEstilosCuenta();
   const nombre = (_usuario && _usuario.nombre) || "";
-  let html =
+  el.innerHTML =
     '<div class="rt-topfila">' +
       '<div class="brand"><span class="material-icons">gavel</span><span>remateTaller</span></div>' +
       '<button class="rt-avatar" id="rtBtnCuenta" aria-label="Mi cuenta" title="' +
         escapar(nombre) + '">' + escapar(inicialesDe(nombre)) + "</button>" +
-    "</div>" +
-    '<nav class="nav-scroll">';
-  NAV_ITEMS.filter(visibleParaMi).forEach((p) => {
-    const cls = p.id === actual ? "nav-link activo" : "nav-link";
-    html += '<a href="' + p.href + '" class="' + cls + '"><span class="material-icons">' +
-      p.icon + "</span><span>" + p.label + "</span></a>";
-  });
-  html += "</nav>";
-  el.innerHTML = html;
+    "</div>";
   // "Salir" ya no vive acá: vivía al final de una barra que scrollea, o sea
   // fuera de pantalla en un teléfono. Ahora está en la hoja de cuenta.
   document.getElementById("rtBtnCuenta")
     .addEventListener("click", mostrarCuenta);
+
+  // Se reusa si ya está: `renderNav()` se puede volver a llamar al cambiar el
+  // usuario, y dos barras pegadas abajo serían dos.
+  let barra = document.getElementById("rt-barra");
+  if (!barra) {
+    barra = document.createElement("nav");
+    barra.id = "rt-barra";
+    document.body.appendChild(barra);
+  }
+  barra.innerHTML = '<div class="nav-scroll">'
+    + NAV_ITEMS.filter(visibleParaMi).map((p) =>
+        '<a href="' + p.href + '" class="' + (p.id === actual ? "nav-link activo" : "nav-link")
+        + '"><span class="material-icons">' + p.icon + "</span><span>" + p.label + "</span></a>")
+      .join("")
+    + "</div>";
+  document.body.classList.add("rt-conbarra");
+  medirBarra(barra);
+}
+
+/**
+ * Escribe en `--rt-piso` lo que la barra tapa DE VERDAD, midiéndola.
+ *
+ * No es un lujo: la barra envuelve en una o dos filas según cuántos permisos
+ * tenga la persona, así que su alto no es un número que se pueda escribir en
+ * el CSS. Un administrador ve ocho ítems y un cobrador ve tres, y con un valor
+ * fijo a uno de los dos le sobra un hueco o le queda contenido tapado.
+ *
+ * Lo usan el `padding-bottom` del body y el toast (§ del design-system). Si
+ * mañana algo más se pega abajo, usa la variable y listo.
+ */
+function medirBarra(barra) {
+  const aplicar = () => {
+    // En ≥900px la barra está arriba y no tapa nada: ahí manda el @media, que
+    // la pone en 0. Pisarla con una medición sería volver a meter el número a
+    // mano por la ventana.
+    if (getComputedStyle(barra).position !== "fixed") {
+      document.documentElement.style.removeProperty("--rt-piso");
+      return;
+    }
+    document.documentElement.style.setProperty("--rt-piso", barra.offsetHeight + "px");
+  };
+  aplicar();
+  // Al rotar el teléfono cambia cuántos ítems entran por fila, así que cambia
+  // el alto. `ResizeObserver` puede no estar en un navegador viejo: sin él la
+  // barra sigue andando, sólo que el hueco no se reajusta al rotar.
+  if (typeof ResizeObserver === "function") new ResizeObserver(aplicar).observe(barra);
+  window.addEventListener("resize", aplicar);
 }
 
 /**

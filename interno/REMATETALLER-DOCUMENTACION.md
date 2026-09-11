@@ -268,6 +268,29 @@ Antes de dar un archivo por entregado se valida que el JS parsea. Un error de si
 un módulo ES no rompe una función: **deja la página en blanco**, sin nada visible que
 explique por qué.
 
+### 3.18 bis · La navegación va ABAJO, al alcance del pulgar
+Desde la **tanda 26**. La barra de secciones vive pegada al borde inferior de la pantalla,
+no arriba: en un teléfono la mano sostiene el aparato por abajo y el rincón superior
+izquierdo es el punto más lejano del pulgar. Es el mismo diseño que ya usaban Casa Verde
+(`.cv-barra`) y el panel de datos (`#nav`), y llega acá por el camino habitual — si un
+sitio del ecosistema ya resolvió algo, se trae.
+
+Dos cosas que **no** cambiaron, y conviene que sigan sin cambiar:
+
+- **Se siguen viendo los ocho ítems**, envolviendo en dos filas (§ v1.1 del
+  `design-system.css`). Un acceso que no se ve no existe; uno que no se alcanza, tampoco.
+  Por eso la barra es de envolver y no de scrollear, y por eso no hay un botón "Más".
+- **Arriba queda la marca y el avatar de la cuenta.** La hoja de cuenta no se movió (§ 3.19).
+
+**Y ningún número escrito a mano para esquivarla.** Lo que la barra tapa se llama
+`--rt-piso`, y lo escribe `medirBarra()` en `utils.js` **midiendo la barra**, no
+estimándola: su alto depende de cuántos permisos tenga quien entró —un administrador ve
+ocho ítems y un cobrador ve tres—, así que no es un número que se pueda poner en el CSS.
+Todo lo que se pegue al borde inferior usa esa variable; hoy la usan el hueco del `body` y
+el toast, que sin ella quedaba tapado. En ≥900px la barra se va arriba y `--rt-piso` pasa a
+valer 0 solo: es la misma barra con otro `position`, no un segundo diseño. Es el
+`--cv-piso` de Casa Verde, que ya cometió y corrigió este error.
+
 ### 3.19 · La salida vive en la hoja de cuenta, no en la navegación
 El avatar de la topbar abre la hoja de cuenta: quién sos, **Cerrar sesión** y **Reparar la
 app**. No se pone "Salir" como ítem de la barra de navegación: la barra scrollea horizontal
@@ -1053,6 +1076,30 @@ el sistema por andando.
 >
 > **La lección, que vale más que las siete entradas:** un registro no se detiene con un
 > aviso. Se detiene en silencio, y lo que se rompe después no parece tener nada que ver.
+
+---
+
+## v0.5.19 — La navegación baja al pulgar (Tanda 26 · 11-sep-2026)
+
+> **Entrega:** `interno/utils.js` v1.14, `interno/design-system.css` v1.2.
+> **Ninguna página se tocó:** las ocho ya llamaban a `renderNav()`.
+
+**Qué se pidió.** Mauro, textual: bajar los botones del menú "como en los otros sitios de
+administración, que quedan accesibles a la mano derecha, en el pulgar".
+
+**Qué se hizo.** `renderNav()` deja arriba sólo la marca y el avatar de la cuenta, y crea
+—si no existe— una barra fija al borde inferior con los ítems de siempre. La barra la arma
+el núcleo y no el HTML, así que una página nueva la hereda por llamar a `renderNav()` y por
+nada más. El detalle de diseño y las dos decisiones que no cambian están en el § 3.18 bis.
+
+**Lo que casi se rompe y hay que mirar si se toca algo pegado abajo.** El toast estaba en
+`bottom: 24px`, o sea justo detrás de la barra nueva: un mensaje de error que no se ve. Se
+pasó a `calc(24px + var(--rt-piso))`. Cualquier cosa que se pegue al borde inferior de acá
+en adelante usa esa variable; si alguien escribe un número a mano, queda viejo el día que
+cambie la cantidad de permisos de quien entra.
+
+**Verificación.** `node --check` sobre `utils.js` y sobre los 13 módulos que viven adentro
+de los `.html`; `node pruebas/luces.mjs`, 24 pasadas.
 
 ---
 
