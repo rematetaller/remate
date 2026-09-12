@@ -1,5 +1,5 @@
 // =====================================================
-// remateTaller — Reglas de Firestore v0.8 (11-sep-2026)
+// remateTaller — Reglas de Firestore v0.9 (12-sep-2026)
 // Se pegan COMPLETAS en la consola. Nunca por fragmentos.
 //
 // Cambios respecto de la v0.7:
@@ -252,6 +252,40 @@ service cloud.firestore {
     match /metodosPago/{id} {
       allow read: if activo();
       allow create, update: if puede('cobros');
+      allow delete: if esAdmin();
+    }
+
+    // ---------- Reportes de fallas (v0.9) ----------
+    // Quien trabaja acá ve una falla en la pantalla donde está trabajando y la
+    // reporta desde ahí, sin salir del sitio y sin cuenta nueva. Después un
+    // agente los lee y los convierte en pendientes del panel de Mauro, que es
+    // donde él mira qué hay que hacer. El detalle está en `REPORTES.md`.
+    //
+    // POR QUÉ ESTO Y NO ESCRIBIR DIRECTO EN EL PANEL: el panel vive en OTRO
+    // proyecto de Firebase (`datos-830f8`), y un token de Firebase sirve para
+    // un proyecto y nada más. Para escribir allá habría que darle a cada
+    // administrador de remate una cuenta en la base donde Mauro guarda su
+    // bóveda. No se hace: cada uno reporta en su casa.
+    match /reportes/{id} {
+      // El `uid` tiene que ser el de quien escribe. Un reporte que puede
+      // mentir de quién vino no sirve para volver a preguntarle qué vio, y
+      // eso es la mitad de para qué existe un reporte.
+      allow create: if activo()
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.estado == 'nuevo';
+
+      // Leerlos es de admin. Un reporte puede nombrar a un cliente, una venta
+      // o un problema de dinero: se escribe sin pensar en quién lo va a leer,
+      // así que se lo trata como lo más sensible que podría contener.
+      // El agente los lee por el bloque `esAgente()` de arriba — lectura sola.
+      allow get, list: if esAdmin();
+
+      // Se cierra o se marca tomado, nunca se reescribe: `texto` y `uid` no
+      // pueden cambiar. Pisar lo que dijo la persona es perder el reporte, y
+      // es justo lo que nadie nota hasta que hace falta.
+      allow update: if esAdmin()
+                    && request.resource.data.texto == resource.data.texto
+                    && request.resource.data.uid == resource.data.uid;
       allow delete: if esAdmin();
     }
 

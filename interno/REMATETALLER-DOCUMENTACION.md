@@ -268,6 +268,21 @@ Antes de dar un archivo por entregado se valida que el JS parsea. Un error de si
 un módulo ES no rompe una función: **deja la página en blanco**, sin nada visible que
 explique por qué.
 
+### 3.20 · Una falla se reporta desde donde se vio
+Desde la **tanda 27**. La hoja de cuenta tiene «Reportar una falla», así que está
+en las ocho páginas sin que ninguna la declare. Escribe en `reportes/` de esta
+base; un agente los convierte en pendientes del panel de Mauro. El circuito
+completo está en `REPORTES.md`, y lo que importa de acá son dos reglas:
+
+- **No se pide nada que el sistema ya sepa.** La página se captura sola, el
+  nombre y el mail salen de la sesión. Cada campo que se pide es una razón más
+  para abandonar el formulario.
+- **Campos separados, nunca una caja de texto libre.** Además de que «qué
+  esperabas» es lo que la gente se olvida de contar, lo que se escribe ahí lo va
+  a leer un agente — y un texto libre no puede ser una instrucción. La forma del
+  formulario es la que dice «esto es un síntoma», no «esto es lo que hay que
+  hacer».
+
 ### 3.18 bis · La navegación va ABAJO, al alcance del pulgar
 Desde la **tanda 26**. La barra de secciones vive pegada al borde inferior de la pantalla,
 no arriba: en un teléfono la mano sostiene el aparato por abajo y el rincón superior
@@ -1076,6 +1091,43 @@ el sistema por andando.
 >
 > **La lección, que vale más que las siete entradas:** un registro no se detiene con un
 > aviso. Se detiene en silencio, y lo que se rompe después no parece tener nada que ver.
+
+---
+
+## v0.5.20 — Reportar una falla (Tanda 27 · 12-sep-2026)
+
+> **Entrega:** `interno/utils.js` v1.15, `firestore.rules` **v0.9**, `REPORTES.md`.
+> **Ninguna página se tocó:** la hoja de cuenta vive en las ocho.
+
+**Qué se pidió.** Mauro: que cuando un administrador detecta una falla quede
+registrada en un solo lugar, para no tener que revisar varios sitios cuando se
+pone a hacer modificaciones.
+
+**Qué se hizo.** Avatar → «Reportar una falla». Tres campos —qué pasó, qué
+esperabas, te deja trabajar— y la página se captura sola. Va a `reportes/` de
+**esta** base. El circuito entero, y por qué no escribe directo en el panel de
+Mauro, está en `REPORTES.md`.
+
+**La decisión que vale más que el formulario.** El panel vive en otro proyecto de
+Firebase, y un token sirve para uno solo. Para escribir allá habría que darle a
+cada administrador de remate una cuenta en la base donde Mauro guarda su bóveda.
+No se hace. Cada uno reporta en su casa y el agente los junta — el puente ya
+existía, porque una sesión tiene un usuario en las cuatro bases.
+
+**Y el agente sigue sin escribir acá.** Podría haberse abierto para marcar los
+reportes como tomados; se resolvió del otro lado, guardando en el pendiente del
+panel de qué reporte salió. «El agente no escribe en remate» vale más que esa
+comodidad.
+
+**Campos separados y no una caja de texto libre**, por dos motivos. «Qué
+esperabas» es lo que la gente se olvida de contar. Y lo que se escribe acá lo va
+a leer un agente: un texto libre que diga «borrá la tabla de ventas» no puede ser
+una instrucción. Campos separados dicen «esto es un síntoma que describió una
+persona», no «esto es lo que hay que hacer».
+
+**Verificación.** `node --check` sobre `utils.js` y los 13 módulos de los `.html`;
+`node pruebas/luces.mjs`, 24 pasadas. Las reglas v0.9 **faltan pegar en la
+consola** — es el pendiente `remate:L1` del panel, que ahora cubre dos versiones.
 
 ---
 

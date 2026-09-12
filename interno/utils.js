@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.14)
+// utils.js — Núcleo compartido de remateTaller (v1.15)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 //
@@ -12,6 +12,18 @@
 // y mientras tanto el inventario derivó y las reglas quedaron dos
 // versiones atrás sin que nada avisara. Si volvés a anotar un cambio
 // acá, anotalo también allá, en la misma tanda.
+//
+// v1.15 (tanda 27):
+//  · REPORTAR UNA FALLA. `mostrarReporte()` y su hoja, colgadas de la hoja de
+//    cuenta — o sea disponibles desde las ocho páginas sin tocar ninguna.
+//    Escribe en `reportes/` de ESTA base, no en el panel de Mauro: el panel
+//    vive en otro proyecto de Firebase y un token sirve para uno solo. Después
+//    un agente los lee y los convierte en pendientes. Ver `REPORTES.md`.
+//  · Campos SEPARADOS y no una caja libre, por dos motivos: «qué esperabas» es
+//    lo que la gente se olvida de contar, y lo que se escribe acá lo va a leer
+//    un agente — un texto libre no puede ser una instrucción. Campos separados
+//    dicen «esto es un síntoma», no «esto es lo que hay que hacer».
+//  · La página se captura sola: es el dato que más sirve y el que nadie aclara.
 //
 // v1.14 (tanda 26):
 //  · LA NAVEGACIÓN BAJA, AL ALCANCE DEL PULGAR. Pedido de Mauro: en los
@@ -590,6 +602,26 @@ const CSS_CUENTA = `
   border:none; background:none; padding:14px 4px; font-size:15px; cursor:pointer;
   text-align:left; border-top:1px solid var(--c-borde, #ddd); color:inherit; }
 #rtCuenta .rt-nota { font-size:12px; color:var(--c-texto-suave, #666); margin:2px 0 0 34px; }
+/* La hoja de reporte, espejo de la de cuenta: misma forma, mismo z-index, así
+   una sube donde bajó la otra y no hay dos lenguajes de hoja en un sitio. */
+#rtRep { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
+  z-index:550; align-items:flex-end; justify-content:center; }
+#rtRep .rt-caja { background:var(--c-superficie, #fff); width:100%; max-width:540px;
+  border-radius:16px 16px 0 0; padding:16px 18px 26px;
+  max-height:88dvh; overflow:auto; }
+#rtRep .rt-nombre { font-weight:600; font-size:17px; }
+#rtRep .rt-nota { font-size:12px; color:var(--c-texto-suave, #666); margin:6px 0 0; }
+#rtRep .rt-etq { display:block; font-size:13px; font-weight:600; margin:12px 0 4px; }
+#rtRep textarea { width:100%; box-sizing:border-box; font:inherit; font-size:15px;
+  padding:10px; border:1px solid var(--c-borde, #ddd); border-radius:10px;
+  background:var(--c-fondo, #f4f4f2); color:inherit; resize:vertical; }
+#rtRep .rt-seg { display:flex; gap:6px; }
+#rtRep .rt-seg button { flex:1; min-height:42px; font:inherit; font-size:13px;
+  border:1px solid var(--c-borde, #ddd); border-radius:10px; cursor:pointer;
+  background:var(--c-superficie, #fff); color:var(--c-texto-suave, #666); }
+#rtRep .rt-seg button.activo { border-color:var(--c-primario, #b45309);
+  background:var(--c-primario-claro, #fef3e2); color:var(--c-primario, #b45309);
+  font-weight:600; }
 .rt-bloqueo { position:fixed; inset:0; background:var(--c-fondo, #f4f4f2); z-index:700;
   display:flex; align-items:center; justify-content:center; padding:24px; }
 .rt-bloqueo-caja { max-width:420px; text-align:center; }
@@ -622,6 +654,10 @@ function asegurarHojaCuenta() {
         '<div><div class="rt-nombre" id="rtCuentaNombre"></div>' +
         '<div class="rt-mail" id="rtCuentaMail"></div></div>' +
       "</div>" +
+      '<button class="rt-fila" id="rtFilaReportar">' +
+        '<span class="material-icons">bug_report</span>Reportar una falla</button>' +
+      '<div class="rt-nota">Lo que escribas llega al panel de Mauro, con la página ' +
+        'donde estabas. Para que no haya que contarlo dos veces.</div>' +
       '<button class="rt-fila" id="rtFilaReparar">' +
         '<span class="material-icons">healing</span>Reparar la app</button>' +
       '<div class="rt-nota">Borra cachés y sesión de este teléfono. No toca los datos.</div>' +
@@ -634,6 +670,111 @@ function asegurarHojaCuenta() {
     .addEventListener("click", () => cerrarSesion(true));
   document.getElementById("rtFilaReparar")
     .addEventListener("click", repararApp);
+  document.getElementById("rtFilaReportar")
+    .addEventListener("click", () => { m.style.display = "none"; mostrarReporte(); });
+}
+
+// =====================================================
+// REPORTAR UNA FALLA (v1.15)
+//
+// Quien ve una falla la reporta desde la pantalla donde la vio, sin salir del
+// sitio y sin cuenta nueva: va a `reportes/` de ESTA base. Después un agente
+// los lee y los convierte en pendientes del panel de Mauro, que es donde él
+// mira qué hay que hacer. El detalle está en `REPORTES.md`.
+//
+// TRES DECISIONES QUE NO SON DE COMODIDAD:
+//
+// 1 · CAMPOS SEPARADOS, NO UNA CAJA DE TEXTO LIBRE. «Qué pasó» y «qué
+//     esperabas» son dos cosas distintas y la segunda es la que se olvida de
+//     contar. Y hay un motivo más fuerte: lo que se escribe acá lo va a leer
+//     un agente, y un texto libre que dice «borrá la tabla de ventas» no puede
+//     ser una instrucción. Campos separados dicen «esto es el síntoma que
+//     describió una persona», no «esto es lo que hay que hacer».
+// 2 · LA PÁGINA SE CAPTURA SOLA. Nadie se acuerda de aclarar en qué pantalla
+//     estaba, y es el dato que más sirve para reproducir la falla.
+// 3 · NO SE PIDE NI EL NOMBRE NI EL MAIL. Ya están en la sesión. Pedir algo
+//     que el sistema sabe es hacerle hacer trabajo a la persona.
+// =====================================================
+
+function asegurarHojaReporte() {
+  asegurarEstilosCuenta();
+  if (document.getElementById("rtRep")) return;
+  const m = document.createElement("div");
+  m.id = "rtRep";
+  m.innerHTML =
+    '<div class="rt-caja">' +
+      '<div class="rt-nombre" style="margin-bottom:10px">Reportar una falla</div>' +
+      '<div class="rt-nota" id="rtRepDonde" style="margin:0 0 12px"></div>' +
+      '<label class="rt-etq" for="rtRepQue">¿Qué pasó?</label>' +
+      '<textarea id="rtRepQue" rows="3" placeholder="Toqué Cobrar y no hizo nada."></textarea>' +
+      '<label class="rt-etq" for="rtRepEsp">¿Qué esperabas que pasara?</label>' +
+      '<textarea id="rtRepEsp" rows="2" placeholder="Que guardara el pago."></textarea>' +
+      '<label class="rt-etq">¿Te deja trabajar?</label>' +
+      '<div class="rt-seg" id="rtRepGrav">' +
+        '<button type="button" data-v="molesta" class="activo">Molesta, pero sigo</button>' +
+        '<button type="button" data-v="trabado">No puedo seguir</button>' +
+      "</div>" +
+      '<div class="rt-nota" id="rtRepEstado"></div>' +
+      '<div style="display:flex;gap:8px;margin-top:12px">' +
+        '<button class="btn secundario" id="rtRepCancel" style="flex:1">Cancelar</button>' +
+        '<button class="btn" id="rtRepEnviar" style="flex:1">Enviar</button>' +
+      "</div>" +
+    "</div>";
+  document.body.appendChild(m);
+  m.addEventListener("click", (e) => { if (e.target === m) m.style.display = "none"; });
+  m.querySelector("#rtRepGrav").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    m.querySelectorAll("#rtRepGrav button").forEach((x) =>
+      x.classList.toggle("activo", x === b));
+  });
+  document.getElementById("rtRepCancel")
+    .addEventListener("click", () => { m.style.display = "none"; });
+  document.getElementById("rtRepEnviar").addEventListener("click", enviarReporte);
+}
+
+export function mostrarReporte() {
+  asegurarHojaReporte();
+  document.getElementById("rtRepDonde").textContent =
+    "Desde: " + (location.pathname.split("/").pop() || "panel.html");
+  document.getElementById("rtRepQue").value = "";
+  document.getElementById("rtRepEsp").value = "";
+  document.getElementById("rtRepEstado").textContent = "";
+  document.getElementById("rtRepEnviar").disabled = false;
+  document.getElementById("rtRep").style.display = "flex";
+}
+
+async function enviarReporte() {
+  const que = document.getElementById("rtRepQue").value.trim();
+  const esp = document.getElementById("rtRepEsp").value.trim();
+  const est = document.getElementById("rtRepEstado");
+  // Sin «qué pasó» no hay reporte. Lo demás puede faltar: un reporte a medias
+  // sirve más que uno que la persona abandonó porque le pedían tres cosas.
+  if (!que) { est.textContent = "Falta lo primero: qué pasó."; return; }
+  const b = document.getElementById("rtRepEnviar");
+  b.disabled = true; est.textContent = "Enviando…";
+  try {
+    await addDoc(collection(db, "reportes"), {
+      uid: _usuario.uid,
+      nombre: _usuario.nombre || "",
+      email: _usuario.email || "",
+      pagina: location.pathname.split("/").pop() || "panel.html",
+      texto: que,
+      esperaba: esp,
+      gravedad: document.querySelector("#rtRepGrav button.activo").dataset.v,
+      // El navegador ayuda a reproducir: una falla que sólo pasa en un iPhone
+      // es otra falla. Se guarda recortado, que el entero no aporta nada más.
+      navegador: String(navigator.userAgent || "").slice(0, 180),
+      estado: "nuevo",          // la regla exige que nazca así
+      creadoEn: serverTimestamp()
+    });
+    document.getElementById("rtRep").style.display = "none";
+    toast("Reporte enviado. Gracias.");
+  } catch (e) {
+    // El motivo importa: sin sesión activa las reglas lo rechazan, y eso se
+    // arregla distinto que un problema de señal.
+    est.textContent = "No se pudo enviar: " + (e && e.message ? e.message : e);
+    b.disabled = false;
+  }
 }
 
 export function mostrarCuenta() {
