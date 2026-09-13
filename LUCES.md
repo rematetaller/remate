@@ -99,8 +99,8 @@ ORIGENES_PERMITIDOS   https://rematetaller.github.io
 ```
 
 > **Los valores los carga Mauro a mano, en la web de Vercel.** Ningún chat pide
-> el valor de una credencial ni lo carga por API. Ver `PROTOCOLO-SECRETOS.md`
-> del repo privado `datos`.
+> el valor de una credencial ni lo carga por API. Ver `PROTOCOLO-SECRETOS.md`,
+> en `protocolos/` del repo **público** `maurogasta-crypto/datos`.
 
 Y después **volver a desplegar**: Vercel no aplica variables nuevas a un
 despliegue que ya existe.

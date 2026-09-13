@@ -28,8 +28,8 @@
 // ── SECRETOS ─────────────────────────────────────────────────────────
 // Ningún valor real entra a este repositorio. Acá sólo están los NOMBRES;
 // los valores los carga Mauro a mano en Vercel → Settings → Environment
-// Variables. Ver `.env.example`, `LUCES.md` y `PROTOCOLO-SECRETOS.md` del
-// repo privado `datos`.
+// Variables. Ver `.env.example`, `LUCES.md` y `PROTOCOLO-SECRETOS.md`, que
+// vive en `protocolos/` del repo público `maurogasta-crypto/datos`.
 // =====================================================
 
 import crypto from "node:crypto";

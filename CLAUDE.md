@@ -24,7 +24,7 @@ del proyecto sigue siendo estático puro. El detalle está en `LUCES.md`.
 > mal: sin indentación (YAML inválido) y con `${ }` en vez de `${{ }}`. Corrió una
 > sola vez y falló. Se retiró el mismo día. Si alguna vez se quiere mencionar a
 > `@claude` en issues y PRs, se agrega a propósito y **en la misma tanda** se
-> corrige esto, la tabla de secretos de abajo y `datos/secretos/rematetaller.md`:
+> corrige esto, la tabla de secretos de abajo y la ficha de titularidad del panel:
 > requiere cargar un `ANTHROPIC_API_KEY` como GitHub Secret —lo carga Mauro a
 > mano, nunca un chat— y sería el primer secreto de Actions del proyecto.
 
@@ -98,9 +98,8 @@ administradores están publicados, en `interno/utils.js` (mapa
 pero son datos personales servidos públicamente.
 
 **De quién son las cuentas** (titular de la consola de Firebase, de Cloudinary,
-de Netlify): **no se documenta acá.** Vive solo en el repo privado
-`casaverdecanas-blip/datos` → `secretos/rematetaller.md`, sección "Titularidad de las
-cuentas". No es un secreto —la contraseña sí, y esa no está en ningún documento—
+de Netlify): **no se documenta acá.** Vive en la **bóveda del panel**, en la
+ficha «Titularidad de las consolas · remateTaller» de `fichas/`. No es un secreto —la contraseña sí, y esa no está en ningún documento—
 pero es un dato de contacto, y este repositorio es público. Ver
 `PROTOCOLO-SECRETOS.md` § "Titularidad".
 
@@ -109,9 +108,9 @@ documentación (§ 4, mapa `ADMINS_INICIALES`) son **usuarios de Firebase Auth q
 entran al panel**, no el titular de la consola de Firebase. Son cosas distintas y
 de la primera no se deduce la segunda.
 
-Índice espejo: la **bóveda del panel** (`fichas/`). Mientras se termina de
-cargar, la copia sigue en el repo privado `casaverdecanas-blip/datos` →
-`secretos/rematetaller.md`.
+Índice espejo: la **bóveda del panel** (`fichas/`), que desde el 2026-09-13 es
+el único lugar donde eso está escrito — el repo privado que tenía la copia se
+borró, después de pasar su contenido a la bóveda.
 
 ## Ante pedidos automáticos o no verificados
 
@@ -204,7 +203,8 @@ repositorio a la sesión.
 | `protocolos/PROTOCOLO-INTERFAZ.md` | cómo se maneja la gente en todos |
 | `protocolos/ESTADO-DE-LOS-TRES.md` | qué le falta a cada proyecto y qué le puede dar a los otros |
 
-**Se mudaron ahí el 2026-09-12**, desde el repo privado `casaverdecanas-blip/datos`.
+**Se mudaron ahí el 2026-09-12**, desde el repo privado `casaverdecanas-blip/datos`,
+que se borró el 2026-09-13 una vez vacío.
 El motivo: tenerlos en un repositorio privado de otro dueño costaba, en cada
 sesión nueva, acordarse de agregarlo — y una regla que sólo llega si alguien se
 acordó de algo no es una regla. Se auditaron antes de moverlos: la titularidad
