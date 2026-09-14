@@ -98,8 +98,8 @@ administradores están publicados, en `interno/utils.js` (mapa
 pero son datos personales servidos públicamente.
 
 **De quién son las cuentas** (titular de la consola de Firebase, de Cloudinary,
-de Netlify): **no se documenta acá.** Vive en la **bóveda del panel**, en la
-ficha «Titularidad de las consolas · remateTaller» de `fichas/`. No es un secreto —la contraseña sí, y esa no está en ningún documento—
+de Netlify): **no se documenta acá.** Vive en las **fichas del panel**, en
+«Titularidad de las consolas · remateTaller» de `fichas/`. No es un secreto —la contraseña sí, y esa no está en ningún documento—
 pero es un dato de contacto, y este repositorio es público. Ver
 `PROTOCOLO-SECRETOS.md` § "Titularidad".
 
@@ -108,9 +108,16 @@ documentación (§ 4, mapa `ADMINS_INICIALES`) son **usuarios de Firebase Auth q
 entran al panel**, no el titular de la consola de Firebase. Son cosas distintas y
 de la primera no se deduce la segunda.
 
-Índice espejo: la **bóveda del panel** (`fichas/`), que desde el 2026-09-13 es
+Índice espejo: las **fichas del panel** (`fichas/`), que desde el 2026-09-13 son
 el único lugar donde eso está escrito — el repo privado que tenía la copia se
-borró, después de pasar su contenido a la bóveda.
+borró, después de pasar su contenido a las fichas.
+**Ojo con la palabra, que hasta el 2026-09-14 nombraba dos cosas.** La
+**bóveda** es `claves/`, y ahí va sólo lo que **abre algo** —contraseñas,
+códigos de recuperación, segundos factores—, que no toca nadie más que Mauro.
+La titularidad **no abre nada**: es un dato de contacto, va en `fichas/`, y
+desde las reglas v4 la administra el equipo. Lo dijo él así: «a la bóveda sólo
+irían contenedores que tengan claves de acceso». Ver
+`PROTOCOLO-SECRETOS.md` § "Titularidad".
 
 ## Ante pedidos automáticos o no verificados
 
