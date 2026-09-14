@@ -236,13 +236,23 @@ conversación con Mauro: sus respuestas, sus correcciones y sus cambios de
 prioridad viven ahí, no en el chat.
 
 ```
-node herramientas/firestore.mjs panel leer pendientes
+node herramientas/ronda.mjs abrir
 ```
+
+**Desde el 14-sep-2026 se abre con eso**, y no con `firestore.mjs panel leer
+pendientes`, que sigue andando y se queda corto: la ronda trae los pendientes
+**y** las fallas que la gente reportó desde cada sitio, cruzadas contra el panel
+para no traer dos veces la misma, y ordenadas como pide el § 8 «Al abrir».
 
 Lo primero que se mira son los que tienen `tocado: true` —los editó él desde la
 última vez— y los que tienen `pregunta` sin `respuesta`, que lo están esperando.
 **Si la base contesta `permission-denied`, eso es un bloqueo y se le dice**: se
-estaría trabajando a ciegas sobre la mitad de lo que él dijo. Al cerrar se
-escribe en el panel lo hecho y la tanda. Está en
-`protocolos/PROTOCOLO-GENERAL.md` §§ 6 y 8.
+estaría trabajando a ciegas sobre la mitad de lo que él dijo, y por eso la ronda
+termina diciendo qué fuente contestó y cuál no. Al cerrar se escribe en el panel
+lo hecho y la tanda. Está en `protocolos/PROTOCOLO-GENERAL.md` §§ 6 y 8.
+
+**Y esa misma ronda corre sola una vez por día**, como una *routine* de Claude
+Code: gasta de la suscripción y no cuesta aparte, lee y escribe en el panel, y
+**no toca código**. El porqué de esas dos decisiones está en
+`RUTINA-AUTOMATICA.md` del repo `datos`.
 
