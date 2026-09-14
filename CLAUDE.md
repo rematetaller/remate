@@ -220,7 +220,8 @@ repositorio a la sesión.
 | `protocolos/ESTADO-DE-LOS-TRES.md` | qué le falta a cada proyecto y qué le puede dar a los otros |
 
 **Se mudaron ahí el 2026-09-12**, desde el repo privado `casaverdecanas-blip/datos`,
-que se borró el 2026-09-13 una vez vacío.
+que se vació el 2026-09-13 y Mauro borró el 2026-09-14. Ya no hay dos repositorios
+llamados `datos`: queda uno solo, `maurogasta-crypto/datos`, y es público.
 El motivo: tenerlos en un repositorio privado de otro dueño costaba, en cada
 sesión nueva, acordarse de agregarlo — y una regla que sólo llega si alguien se
 acordó de algo no es una regla. Se auditaron antes de moverlos: la titularidad
