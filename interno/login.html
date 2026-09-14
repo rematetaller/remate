@@ -55,8 +55,33 @@
 </div>
 
 <script type="module">
-import { auth, signInWithEmailAndPassword } from "./utils.js";
-import { onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+// OJO: hasta la v1.15 esta página importaba `onAuthStateChanged` y
+// `sendPasswordResetEmail` DIRECTO de gstatic.com, saltándose `utils.js`.
+// Eran dos cosas mal a la vez: rompía la regla de que el núcleo es el único
+// contacto con el SDK (doc §3.2), y dejaba una SEGUNDA copia del número de
+// versión del SDK, que es el error que este ecosistema ya cometió cuatro
+// veces con los sellos. Ahora sale todo de `utils.js`, que además lo baja
+// diferido.
+import { cargarFirebase, auth, signInWithEmailAndPassword,
+         onAuthStateChanged, sendPasswordResetEmail } from "./utils.js";
+
+// El SDK se baja acá. Si gstatic.com no contesta, esta pantalla lo dice en
+// vez de quedar en blanco: es la PRIMERA que ve alguien que entra, así que
+// una página muda acá parece que el sistema entero está caído.
+try {
+  await cargarFirebase();
+} catch (e) {
+  const aviso = document.getElementById("msgError");
+  if (aviso) {
+    aviso.textContent = (e && e.message) || "No se pudo cargar Firebase.";
+    aviso.style.display = "";
+  } else {
+    document.body.insertAdjacentHTML("afterbegin",
+      '<p style="padding:1rem;margin:0">' +
+      ((e && e.message) || "No se pudo cargar Firebase.") + "</p>");
+  }
+  throw e;
+}
 
 // Si ya hay sesión, ir directo al panel
 onAuthStateChanged(auth, (user) => {

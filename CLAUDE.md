@@ -71,8 +71,8 @@ siguen pendientes, y si algún día entran, sus variables se agregan a esta tabl
 
 | Variable | Qué hace | Tipo | Dónde vive el valor real | Consumida por | Verificado |
 |---|---|---|---|---|---|
-| `firebaseConfig.*` (`apiKey`, `authDomain`, `projectId`, `storageBucket`, `messagingSenderId`, `appId`) | Identifican el proyecto Firebase ante la API web; **no dan permisos** — eso lo hacen las Firestore Rules | público por diseño | `interno/utils.js`, líneas 79-84 (única copia en código) | todo el panel y las dos páginas públicas, vía `utils.js` | leído del repo, 2026-09-07 |
-| `CLOUDINARY.cloud` / `CLOUDINARY.preset` | Cloud name y upload preset **sin firma**: arman las URLs y permiten subir desde el navegador | público por diseño | `interno/utils.js`, líneas 102-103. El preset se define en Cloudinary → Settings → Upload | `subirFoto()` en `utils.js` | leído del repo, 2026-09-07 |
+| `firebaseConfig.*` (`apiKey`, `authDomain`, `projectId`, `storageBucket`, `messagingSenderId`, `appId`) | Identifican el proyecto Firebase ante la API web; **no dan permisos** — eso lo hacen las Firestore Rules | público por diseño | `interno/utils.js`, líneas 234-241 (única copia en código) | todo el panel y las dos páginas públicas, vía `utils.js` | leído del repo, 2026-09-14 |
+| `CLOUDINARY.cloud` / `CLOUDINARY.preset` | Cloud name y upload preset **sin firma**: arman las URLs y permiten subir desde el navegador | público por diseño | `interno/utils.js`, líneas 250-252. El preset se define en Cloudinary → Settings → Upload | `subirFoto()` en `utils.js` | leído del repo, 2026-09-14 |
 | `api_secret` de Cloudinary | Firmaría borrados y operaciones privilegiadas | **ausente por diseño** | No existe acá — solo en la consola de Cloudinary. Consecuencia asumida: al sacar un documento del registro, el archivo queda en Cloudinary | Nadie | ausencia confirmada en todo el repo, 2026-09-07 |
 | Contraseña de cada administrador | Login a `interno/login.html` | dato en runtime | Firebase Authentication. **No se comparten entre personas**: se entra por "Recuperar contraseña", que manda el mail de Firebase | `signInWithEmailAndPassword` en `utils.js` | leído del repo, 2026-09-07 |
 | `usuarios/{uid}` → `rol`, `activo`, `permisos` | Quién entra y qué puede hacer | dato en runtime | Firestore, protegido por las reglas publicadas en la consola | `configuracion.html`, `utils.js` | leído del repo, 2026-09-07 |
@@ -82,7 +82,7 @@ siguen pendientes, y si algún día entran, sus variables se agregan a esta tabl
 | `TUYA_REGION` | Centro de datos de Tuya: `us`/`eu`/`cn`/`in` (por defecto `us`) | configuración, no secreto | Vercel → mismo proyecto | `api/tuya.mjs` | `api/tuya.mjs:65`, 2026-09-09 |
 | `TUYA_LUCES` | JSON alias → identificador del aparato, etiqueta y comando. El panel manda el **alias**; el identificador real no sale del servidor | configuración con datos internos | Vercel → mismo proyecto | `api/tuya.mjs` | `api/tuya.mjs:70`, 2026-09-09 |
 | `ORIGENES_PERMITIDOS` | Desde qué direcciones se acepta un pedido (CORS). Lista blanca: un `*` acá dejaría que cualquier página del mundo usara la sesión de quien la visite | configuración de seguridad | Vercel → mismo proyecto. Por defecto `https://rematetaller.github.io` | `api/tuya.mjs` | `api/tuya.mjs:90`, 2026-09-09 |
-| `PUENTE_LUCES` | La dirección de la función. **No es un secreto** —sin un token de Firebase válido no hace nada— y por eso vive en el código, no en el entorno | público por diseño | `interno/utils.js`, una sola línea. Se edita a mano al crear el proyecto en Vercel | `luces.html` vía `utils.js` | `interno/utils.js:148`, 2026-09-09 |
+| `PUENTE_LUCES` | La dirección de la función. **No es un secreto** —sin un token de Firebase válido no hace nada— y por eso vive en el código, no en el entorno | público por diseño | `interno/utils.js`, una sola línea. Se edita a mano al crear el proyecto en Vercel | `luces.html` vía `utils.js` | `interno/utils.js:265`, 2026-09-14 |
 | Credencial de servidor de Firebase (*service account*) | Le permitiría a la función leer toda la base | **ausente por diseño** | No existe. La función lee `usuarios/{uid}` con el token de la propia persona, así que no puede leer nada que ella no pudiera leer. Un service account sería una llave maestra de ventas, documentos y llaves para prender una luz | Nadie | ausencia confirmada en todo el repo, 2026-09-09 |
 | Reglas de Firestore | Autoridad real de acceso | configuración de seguridad (copia en repo, autoridad en consola) | La autoridad sigue siendo lo publicado en la **consola de Firebase**. La copia vive en `/firestore.rules` (raíz), **v0.9** (2026-09-12) | Firestore | **v0.9 publicada por Mauro el 2026-09-13** (`remate:L6` en el panel). Verificado desde una sesión lo que se puede verificar: el agente entra y `reportes/` contesta. Que lo publicado sea exactamente la v0.9 sólo lo confirma él — el acceso del agente acá es un comodín con exclusiones, así que leer una colección no distingue una versión de otra |
 | Usuario del agente de Claude Code | Deja que un chat LEA la base para compararla con el código publicado. No escribe, y no lee `llaves` ni `documentos` | dato en runtime | Firebase Authentication de `remate-acbc9`. La contraseña vive en las variables de entorno de Claude Code, cargadas por Mauro. **No tiene ficha en `usuarios/`**: su acceso sale del bloque `esAgente()` de las reglas, y de ningún otro lado | `datos/herramientas/firestore.mjs`, proyecto `remate` | UID verificado contra la base, 2026-09-11 |
@@ -156,7 +156,23 @@ verdad después del cambio.
 
 - **Archivos completos, nunca diffs** (doc § 3.1).
 - **El núcleo es `interno/utils.js` y no se duplica** (§ 3.2). Si una función se
-  necesita en dos páginas, sube ahí en la misma tanda.
+  necesita en dos páginas, sube ahí en la misma tanda. **Y es el único que
+  toca el SDK de Firebase**: ninguna página importa de `gstatic.com`. Hasta la
+  v1.15 `login.html` lo hacía, y eran dos cosas mal a la vez — se saltaba el
+  núcleo y dejaba una segunda copia del número de versión del SDK.
+- **El SDK de Firebase se baja DIFERIDO, desde la v1.16** (14-sep-2026), con
+  `import()` dentro de un `try` y no con un `import` estático. Antes, si
+  `gstatic.com` no contestaba, las trece páginas quedaban **en blanco** y sin
+  un solo mensaje: un import estático es una dependencia dura y sin él no
+  evalúa nada de lo que lo importa.
+
+  Lo que exporta `utils.js` son `let` —enlaces vivos—, así que nadie tuvo que
+  reescribir un `doc(db, …)`. **La contra es la que hay que tener presente:**
+  hasta que `cargarFirebase()` resuelva, `db` y `auth` valen `undefined`, así
+  que **nada que dependa de Firebase puede correr al nivel superior de un
+  módulo**. Hoy casi no se nota porque las diez páginas internas entran por
+  `verificarAuth()`, que lo espera sola y muestra el cartel si no baja; si
+  mañana una página toca `db` antes de eso, falla en silencio.
 - **Una colección nueva entra con su regla de Firestore, en la misma tanda**
   (§ 5.3). Rige el deny por defecto: sin bloque propio, queda inaccesible.
 - **Las reglas se editan completas, nunca por fragmentos** (§ 5.2).

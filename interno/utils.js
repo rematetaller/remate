@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.15)
+// utils.js — Núcleo compartido de remateTaller (v1.16)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 //
@@ -12,6 +12,19 @@
 // y mientras tanto el inventario derivó y las reglas quedaron dos
 // versiones atrás sin que nada avisara. Si volvés a anotar un cambio
 // acá, anotalo también allá, en la misma tanda.
+//
+// v1.16 (tanda 28):
+//  · EL SDK DE FIREBASE SE CARGA DIFERIDO. Era el hallazgo A2 de la primera
+//    auditoría: `general:cdn-diferido` existía y no se cumplía en ninguno de
+//    los cuatro sitios. Con los `import` estáticos, si gstatic.com no
+//    contestaba las trece páginas quedaban EN BLANCO, sin un solo mensaje.
+//    Ahora el SDK entra por `import()` dentro de un `try`, y `verificarAuth`
+//    lo espera: las diez páginas internas no cambiaron una línea, porque
+//    todas entran por ahí.
+//  · `login.html` dejó de importar de gstatic directo. Se saltaba el núcleo
+//    (doc §3.2) y era una segunda copia del número de versión del SDK.
+//  · `repararApp()` ahora anda TAMBIÉN sin SDK: borra service workers,
+//    cachés y vuelve a login. Es justo cuando más falta hace.
 //
 // v1.15 (tanda 27):
 //  · REPORTAR UNA FALLA. `mostrarReporte()` y su hoja, colgadas de la hoja de
@@ -120,17 +133,102 @@
 //    mensaje que dice qué pasó.
 // =====================================================
 
-import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import {
-  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
-  createUserWithEmailAndPassword
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import {
-  getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
-  collection, getDocs, query, where, orderBy, limit,
-  serverTimestamp, onSnapshot, getCountFromServer,
-  terminate, clearIndexedDbPersistence
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+// =====================================================
+//  EL SDK SE CARGA DIFERIDO, Y ÉSTE ES EL MOTIVO (v1.16, 14-sep-2026).
+//
+//  Hasta la v1.15 esto eran tres `import` ESTÁTICOS desde gstatic.com. Un
+//  import estático es una dependencia dura: si el CDN no contesta —un
+//  ómnibus, un sótano, una red que filtra, gstatic caído— el módulo no
+//  evalúa, y con él no evalúa NINGUNA de las trece páginas que lo importan.
+//  No fallaba la parte que usa Firebase: fallaba la página entera, EN BLANCO
+//  y sin un solo mensaje. Indistinguible de «la app se rompió».
+//
+//  Es el hallazgo A2 de la primera auditoría de protocolos (2026-09-09): la
+//  regla `general:cdn-diferido` existía y no se cumplía en ninguno de los
+//  cuatro sitios. El panel de datos lo resolvió primero, CasaYourte después,
+//  y esto es el mismo patrón traído acá — `general:llevar-no-reinventar`.
+//
+//  CÓMO NO OBLIGÓ A REESCRIBIR LAS TRECE PÁGINAS: lo que se exporta son
+//  `let`, no `const`. Un `export let` es un ENLACE VIVO — quien escribió
+//  `doc(db, …)` ve el valor que la variable tenga al USARLA, no el que tenía
+//  al importar. Así `cargarFirebase()` los rellena y nadie tuvo que cambiar
+//  una línea.
+//
+//  ⚠ LA CONTRA, QUE HAY QUE SABER: antes de que `cargarFirebase()` resuelva,
+//  todos valen `undefined`. Nada que dependa de Firebase puede correr al
+//  nivel superior de un módulo. Acá eso casi no se nota porque las diez
+//  páginas internas entran por `verificarAuth()`, que la espera sola — pero
+//  si mañana una página toca `db` antes de eso, va a fallar en silencio.
+// =====================================================
+
+const SDK = "https://www.gstatic.com/firebasejs/10.12.0/";
+
+/* Enlaces vivos: `undefined` hasta que `cargarFirebase()` los rellena. */
+export let app, auth, db;
+export let doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
+           collection, getDocs, query, where, orderBy, limit,
+           serverTimestamp, onSnapshot, getCountFromServer,
+           terminate, clearIndexedDbPersistence;
+export let onAuthStateChanged, signInWithEmailAndPassword, signOut,
+           createUserWithEmailAndPassword, sendPasswordResetEmail;
+
+/* `false` mientras no anduvo. Lo mira `interno/diagnostico.html`. */
+export let sdkCargado = false;
+
+/* Los guarda `crearCuentaAuth`, que arma una app secundaria. */
+let _initializeApp, _getApps, _getAuth;
+
+let _promesaSdk = null;
+
+/**
+ * Baja el SDK y prepara `app`, `auth` y `db`. Idempotente: si dos cosas la
+ * llaman a la vez, el SDK se baja una sola vez. Y si FALLÓ, un llamado nuevo
+ * REINTENTA —por eso la promesa se borra en el catch—: el caso típico es que
+ * vuelva la señal.
+ */
+export function cargarFirebase() {
+  if (_promesaSdk) return _promesaSdk;
+  _promesaSdk = (async () => {
+    let modApp, modAuth, modFs;
+    try {
+      [modApp, modAuth, modFs] = await Promise.all([
+        import(SDK + "firebase-app.js"),
+        import(SDK + "firebase-auth.js"),
+        import(SDK + "firebase-firestore.js")
+      ]);
+    } catch (e) {
+      // El error del navegador para un módulo que no baja es genérico
+      // («error loading dynamically imported module»). Se traduce acá, una
+      // sola vez, para que ninguna pantalla tenga que adivinar.
+      const err = new Error(
+        "No se pudo cargar Firebase desde gstatic.com. Suele ser falta de " +
+        "señal, o una red que bloquea ese dominio."
+      );
+      err.causa = e;
+      err.codigo = "sdk-no-baja";
+      _promesaSdk = null;
+      throw err;
+    }
+
+    ({ initializeApp: _initializeApp, getApps: _getApps } = modApp);
+    _getAuth = modAuth.getAuth;
+
+    ({ onAuthStateChanged, signInWithEmailAndPassword, signOut,
+       createUserWithEmailAndPassword, sendPasswordResetEmail } = modAuth);
+    ({ doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
+       collection, getDocs, query, where, orderBy, limit,
+       serverTimestamp, onSnapshot, getCountFromServer,
+       terminate, clearIndexedDbPersistence } = modFs);
+
+    app = _initializeApp(firebaseConfig);
+    auth = _getAuth(app);
+    db = modFs.getFirestore(app);
+
+    sdkCargado = true;
+    return true;
+  })();
+  return _promesaSdk;
+}
 
 // ---------- Configuración Firebase (pública por diseño) ----------
 const firebaseConfig = {
@@ -142,17 +240,10 @@ const firebaseConfig = {
   appId: "1:815214584678:web:3fd234a6e92eed932e5ea7"
 };
 
-export const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-
-// Re-export de helpers de Firestore para las páginas.
-export {
-  doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
-  collection, getDocs, query, where, orderBy, limit,
-  serverTimestamp, onSnapshot, getCountFromServer,
-  signInWithEmailAndPassword
-};
+// `app`, `auth`, `db` y los helpers de Firestore ya están declarados arriba
+// como `export let`, y los rellena `cargarFirebase()`. No se vuelven a
+// exportar acá: una segunda exportación del mismo nombre es un error de
+// sintaxis, y además la lista de arriba es la única que hay que mantener.
 
 // ---------- Cloudinary (cuenta propia de remateTaller) ----------
 // Solo cloud name + preset unsigned. El api_secret NUNCA va en el cliente.
@@ -252,9 +343,10 @@ export function puede(permiso) {
  * sabe el nombre y los permisos.
  */
 export async function crearCuentaAuth(email, clave) {
-  const app2 = getApps().find((a) => a.name === "alta-usuarios")
-    || initializeApp(firebaseConfig, "alta-usuarios");
-  const auth2 = getAuth(app2);
+  await cargarFirebase();
+  const app2 = _getApps().find((a) => a.name === "alta-usuarios")
+    || _initializeApp(firebaseConfig, "alta-usuarios");
+  const auth2 = _getAuth(app2);
   const cred = await createUserWithEmailAndPassword(auth2, email, clave);
   const uid = cred.user.uid;
   await signOut(auth2);
@@ -280,7 +372,25 @@ export function generarClave() {
  * rebotaba a login.html en silencio y parecía un error de contraseña).
  * callback(user, datosUsuario)
  */
-export function verificarAuth(callback) {
+export async function verificarAuth(callback) {
+  // El SDK se baja ACÁ, y es lo que hace que las diez páginas internas no
+  // hayan tenido que cambiar una línea: todas entran por esta puerta.
+  // Si gstatic.com no contesta, se muestra el mismo cartel de pantalla
+  // completa que ya se usa para «no tenés acceso» —`general:llevar-no-
+  // reinventar`— en vez de dejar la página en blanco.
+  try {
+    await cargarFirebase();
+  } catch (e) {
+    mostrarSinAcceso(
+      "No se pudo abrir el panel.",
+      (e && e.message) || "No se pudo cargar Firebase." +
+      " El panel en sí está bien: falta una pieza que se baja de internet" +
+      " cada vez y no se puede guardar en el teléfono. Con señal, volvé a" +
+      " intentar.",
+      ""
+    );
+    return;
+  }
   onAuthStateChanged(auth, async (user) => {
     if (!user) { window.location.href = "login.html"; return; }
     try {
@@ -348,6 +458,9 @@ function mostrarSinAcceso(titulo, detalle, dato) {
  */
 export async function cerrarSesion(confirmar = true) {
   if (confirmar && !window.confirm("¿Cerrar sesión en este dispositivo?")) return;
+  // Sin SDK no hay sesión que cerrar, pero igual hay que llevar a la persona
+  // a login.html: es el botón del cartel de «no se pudo abrir».
+  try { await cargarFirebase(); } catch (e) { window.location.replace("login.html"); return; }
   try { await signOut(auth); } catch (e) { console.warn("signOut:", e); }
   try {
     await Promise.race([
@@ -375,7 +488,12 @@ export async function repararApp() {
     "y te va a pedir entrar de nuevo.\n\n" +
     "No se toca nada del servidor: ni datos, ni fotos, ni usuarios.\n\n¿Seguimos?"
   )) return;
-  try { await signOut(auth); } catch (e) { console.warn("signOut:", e); }
+  // Reparar tiene que andar JUSTAMENTE cuando algo está roto, así que si el
+  // SDK no baja se hace igual todo lo que no depende de él: service workers,
+  // cachés y la vuelta a login. Es lo que más falta hace en ese caso.
+  let haySdk = true;
+  try { await cargarFirebase(); } catch (e) { haySdk = false; }
+  if (haySdk) { try { await signOut(auth); } catch (e) { console.warn("signOut:", e); } }
   try {
     if ("serviceWorker" in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();
@@ -389,7 +507,7 @@ export async function repararApp() {
     }
   } catch (e) { console.warn("cachés:", e); }
   try {
-    await Promise.race([
+    if (haySdk) await Promise.race([
       (async () => { await terminate(db); await clearIndexedDbPersistence(db); })(),
       new Promise((r) => setTimeout(r, 3000))
     ]);
@@ -410,6 +528,11 @@ export async function repararApp() {
 export async function validarLlave(codigo) {
   if (!codigo) return { ok: false, motivo: "sin-codigo" };
   try {
+    // `index.html` y `comprador.html` no pasan por `verificarAuth`, así que
+    // el SDK lo pide cada una de las funciones que usan. Si no baja, cae en
+    // el catch de abajo y devuelve motivo «error», que la página ya sabe
+    // mostrar.
+    await cargarFirebase();
     const snap = await getDoc(doc(db, "llaves", String(codigo).trim().toUpperCase()));
     if (!snap.exists()) return { ok: false, motivo: "inexistente" };
     const d = snap.data();
@@ -426,6 +549,7 @@ export async function validarLlave(codigo) {
 /** Lee la configuración pública (textos, WhatsApp de contacto). */
 export async function leerConfigPublico() {
   try {
+    await cargarFirebase();
     const snap = await getDoc(doc(db, "config", "publico"));
     return snap.exists() ? snap.data() : {};
   } catch (e) {
@@ -753,6 +877,10 @@ async function enviarReporte() {
   const b = document.getElementById("rtRepEnviar");
   b.disabled = true; est.textContent = "Enviando…";
   try {
+    // A esta altura el SDK ya está —quien ve la hoja de cuenta pasó por
+    // `verificarAuth`—, pero se pide igual: una función que puede llamarse
+    // sola no debe depender de que alguien haya cargado antes.
+    await cargarFirebase();
     await addDoc(collection(db, "reportes"), {
       uid: _usuario.uid,
       nombre: _usuario.nombre || "",
@@ -1236,6 +1364,10 @@ const SIN_PUENTE = "Falta configurar la dirección del puente de luces " +
 
 async function llamarPuente(opciones = {}) {
   if (!PUENTE_LUCES) return { ok: false, motivo: SIN_PUENTE, sinConfigurar: true };
+  // Ídem: `luces.html` entra por `verificarAuth`, pero sin esto un `auth`
+  // todavía en `undefined` tiraría un TypeError en vez del mensaje claro.
+  try { await cargarFirebase(); }
+  catch (e) { return { ok: false, motivo: (e && e.message) || "No se pudo cargar Firebase." }; }
   const u = auth.currentUser;
   if (!u) return { ok: false, motivo: "No hay sesión abierta." };
 
