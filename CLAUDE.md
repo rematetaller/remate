@@ -259,6 +259,18 @@ estaría trabajando a ciegas sobre la mitad de lo que él dijo, y por eso la ron
 termina diciendo qué fuente contestó y cuál no. Al cerrar se escribe en el panel
 lo hecho y la tanda. Está en `protocolos/PROTOCOLO-GENERAL.md` §§ 6 y 8.
 
+
+**Y antes de tocar código se TOMA una línea de trabajo.** Desde el 2026-09-14,
+porque ese día dos chats trabajaron en paralelo sobre el mismo ecosistema sin
+enterarse uno del otro. Cada chat arranca sin memoria del anterior; lo único
+que los dos ven es el panel. Una **línea** es el porqué que agrupa varios
+pendientes y dice **quién la tiene ahora mismo**. La ronda las encabeza con «EN
+QUÉ ESTAMOS», el panel las muestra arriba de todo y en la pestaña de cada sitio.
+
+**Si una línea ya está tomada por otro chat, no se toca:** se le dice a Mauro
+acá, con el nombre de la línea y de quién la tiene. El reglamento completo está
+en `protocolos/PROTOCOLO-GENERAL.md` § 2.1 quinquies del repo `datos`.
+
 **Y esa misma ronda corre sola una vez por día**, como una *routine* de Claude
 Code: gasta de la suscripción y no cuesta aparte, lee y escribe en el panel, y
 **no toca código**. El porqué de esas dos decisiones está en
