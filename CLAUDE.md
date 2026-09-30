@@ -92,7 +92,7 @@ siguen pendientes, y si algún día entran, sus variables se agregan a esta tabl
 | `TUYA_REGION` | Centro de datos de Tuya: `us`/`eu`/`cn`/`in` (por defecto `us`) | configuración, no secreto | Vercel → mismo proyecto | `api/tuya.mjs` | `api/tuya.mjs:65`, 2026-09-09 |
 | `TUYA_LUCES` | JSON alias → identificador del aparato, etiqueta y comando. El panel manda el **alias**; el identificador real no sale del servidor | configuración con datos internos | Vercel → mismo proyecto | `api/tuya.mjs` | `api/tuya.mjs:70`, 2026-09-09 |
 | `ORIGENES_PERMITIDOS` | Desde qué direcciones se acepta un pedido (CORS). Lista blanca: un `*` acá dejaría que cualquier página del mundo usara la sesión de quien la visite | configuración de seguridad | Vercel → mismo proyecto. Por defecto `https://rematetaller.github.io` | `api/tuya.mjs` | `api/tuya.mjs:90`, 2026-09-09 |
-| Clave de Gemini (la IA del inventario) | Identifica la foto y busca su ficha en internet | secreto de infraestructura | **No está en este proyecto**: es `GEMINI_API_KEY` de Casa Verde, en su Netlify. Remate llama a `claude-proxy` sin credenciales | `interno/identificar.js` | 2026-09-30 |
+| Clave de Gemini (la IA del inventario) | Identifica la foto, busca su ficha y sugiere un precio en Uruguay | secreto de infraestructura | **No está en este proyecto**: es `GEMINI_API_KEY` de Casa Verde, en su Netlify. Remate llama a `claude-proxy` sin credenciales | `interno/identificar.js` | 2026-09-30 |
 | `PUENTE_LUCES` | La dirección de la función. **No es un secreto** —sin un token de Firebase válido no hace nada— y por eso vive en el código, no en el entorno | público por diseño | `interno/utils.js`, una sola línea. Se edita a mano al crear el proyecto en Vercel | `luces.html` vía `utils.js` | `interno/utils.js:265`, 2026-09-14 |
 | Credencial de servidor de Firebase (*service account*) | Le permitiría a la función leer toda la base | **ausente por diseño** | No existe. La función lee `usuarios/{uid}` con el token de la propia persona, así que no puede leer nada que ella no pudiera leer. Un service account sería una llave maestra de ventas, documentos y llaves para prender una luz | Nadie | ausencia confirmada en todo el repo, 2026-09-09 |
 | Reglas de Firestore | Autoridad real de acceso | configuración de seguridad (copia en repo, autoridad en consola) | La autoridad sigue siendo lo publicado en la **consola de Firebase**. La copia vive en `/firestore.rules` (raíz), **v1.0** (2026-09-30, entra `avisos_contacto`; la v0.9 es la publicada hasta que Mauro pegue ésta) | Firestore | **v0.9 publicada por Mauro el 2026-09-13** (`remate:L6` en el panel). Verificado desde una sesión lo que se puede verificar: el agente entra y `reportes/` contesta. Que lo publicado sea exactamente la v0.9 sólo lo confirma él — el acceso del agente acá es un comodín con exclusiones, así que leer una colección no distingue una versión de otra |
@@ -221,15 +221,18 @@ verdad después del cambio.
   lado del cliente, y nada de credenciales de servidor de Firebase del lado del
   puente. Ver `LUCES.md`.
 - **Antes de subir se corren `node pruebas/luces.mjs`** (24 casos) **y `node
-  pruebas/identificar.mjs`** (12 casos), los dos sin npm ni red, y se comprueba
+  pruebas/identificar.mjs`** (13 casos), los dos sin npm ni red, y se comprueba
   que parsee el JavaScript que vive adentro de los `.html`.
-- **Lo que trae Gemini es una PROPUESTA, y no trae precios** (tanda 30). No
-  escribe en la base: llena los campos vacíos del formulario, muestra de dónde
-  sacó la descripción y la persona corrige y guarda. Poner precio es el permiso
-  `validar`, no el de inventario, y un precio de internet para un usado de
-  remate sería una promesa falsa. **Y el modelo es `gemini-2.5-flash-lite`, no
-  `gemini-2.5-flash`**: ése piensa antes de contestar, el pensamiento se come
-  `max_tokens` y el JSON llega cortado — pasó en la primera prueba real.
+- **Lo que trae Gemini es una PROPUESTA** (tanda 30): título, descripción,
+  categoría y un **precio sugerido en Uruguay** para esa pieza usada, con su
+  rango y en qué se basó. No escribe en la base: llena los campos vacíos del
+  formulario y la persona corrige y guarda. El precio se lee con desconfianza
+  (`leerPrecio`): sin fundamento va vacío, y una moneda que no sea UYU o USD no
+  se adivina. **La primera versión no traía precio y era un error mío**, no una
+  regla: el formulario ya pide «Precio unitario sugerido» a quien carga. **Y el
+  modelo es `gemini-2.5-flash-lite`, no `gemini-2.5-flash`**: ése piensa antes
+  de contestar, el pensamiento se come `max_tokens` y el JSON llega cortado —
+  pasó en la primera prueba real.
 - **Si el sitio pasa a dominio propio** (§ 12.2), `ORIGENES_PERMITIDOS` cambia
   en la misma tanda o las luces dejan de responder sin aviso.
 

@@ -21,15 +21,19 @@
 //
 // ── LO QUE DEVUELVE ES UNA PROPUESTA ─────────────────────────────────
 // No escribe nada en la base. El formulario la muestra, la persona la
-// corrige, y guarda ella. Y no trae PRECIOS: poner precio es el permiso
-// `validar`, no el de inventario, y un precio sacado de internet para un
-// usado de remate sería una promesa falsa.
+// corrige, y guarda ella. Trae título, descripción y —desde la 1.2, pedido
+// de Mauro el mismo 30-sep— un PRECIO SUGERIDO EN URUGUAY para esa pieza
+// usada, con su rango y en qué se basó. La 1.1 no traía precio por un
+// criterio mío que Mauro no compartía: el formulario ya tiene «Precio
+// unitario sugerido» y quien carga lo tiene que poner igual. El precio que
+// viene de acá es un punto de partida a la vista, nunca un dato: se ve de
+// dónde salió y se corrige.
 //
 // Este archivo no importa nada, a propósito: así lo corre el banco
 // (`node pruebas/identificar.mjs`) sin navegador y sin Firebase.
 // =====================================================
 
-export const VERSION_IDENTIFICAR = "identificar-1.1";
+export const VERSION_IDENTIFICAR = "identificar-1.2";
 export const FUNCION_IA = "https://serene-scone-76bd4e.netlify.app/.netlify/functions/claude-proxy";
 // El mismo que usa la lectura de facturas por defecto. NO `gemini-2.5-flash`:
 // ése piensa antes de contestar y el pensamiento se come `max_tokens`, así
@@ -43,7 +47,8 @@ export function armarPrompt({ categorias = [], pista = "" } = {}) {
     "Te paso la foto de UN artículo. Hacé dos cosas:",
     "1) Identificá qué es: el tipo de artículo, y la marca y el modelo si se ven (placa, etiqueta, grabado).",
     "2) Buscá en internet la ficha de ese modelo para escribir la descripción técnica.",
-    "REGLAS: lo que no se ve en la foto ni encontrás, va null. NO inventes una marca ni un modelo. Si algo te genera duda, poné el nombre del campo en \"dudas\". NO pongas precios.",
+    "3) Sugerí un precio de venta EN URUGUAY para ESA pieza usada, en el estado que se ve, como se vendería en un remate o en MercadoLibre Uruguay (usados). Buscá publicaciones reales de Uruguay. Poné un valor, un mínimo y un máximo, la moneda en que se publica normalmente (UYU o USD) y en qué te basaste, en una línea.",
+    "REGLAS: lo que no se ve en la foto ni encontrás, va null. NO inventes una marca ni un modelo. Si algo te genera duda, poné el nombre del campo en \"dudas\". Si no podés estimar un precio con algún fundamento, el precio va null: es mejor que un número inventado.",
     pista ? `La persona que carga el inventario anotó: «${String(pista).slice(0, 120)}». Tomalo como pista, no como verdad.` : "",
     "Devolvé SOLO un objeto JSON, sin texto antes ni después y sin ``` alrededor, con esta forma:",
     JSON.stringify({
@@ -53,6 +58,7 @@ export function armarPrompt({ categorias = [], pista = "" } = {}) {
       especificaciones: [{ dato: "Potencia", valor: "650 W" }],
       categoria: categorias.length ? "una de la lista de abajo, o null" : null,
       estadoVisible: "lo que se ve del estado (óxido, piezas faltantes, golpes), o null",
+      precio: { valor: 0, minimo: 0, maximo: 0, moneda: "UYU | USD", base: "en qué te basaste, una línea" },
       confianza: "alta | media | baja", dudas: [],
     }),
     categorias.length ? "Categorías posibles: " + categorias.map((c) => `«${c}»`).join(", ") + "." : "",
@@ -81,7 +87,30 @@ export function leerRespuesta(texto, categorias = []) {
     estadoVisible: txt(x.estadoVisible, 300),
     confianza: ["alta", "media", "baja"].includes(x.confianza) ? x.confianza : "baja",
     dudas: (Array.isArray(x.dudas) ? x.dudas : []).map((d) => txt(d, 40)).filter(Boolean).slice(0, 10),
+    precio: leerPrecio(x.precio),
   };
+}
+
+/* El precio, con desconfianza: un número positivo y razonable, una moneda
+   que el formulario conozca, y un rango que contenga al valor. Lo que no
+   cierra, null — un precio mal leído es peor que ninguno. */
+export function leerPrecio(x) {
+  if (!x || typeof x !== "object") return null;
+  const num = (v) => {
+    const n = typeof v === "number" ? v : Number(String(v ?? "").replace(/[^\d.,]/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", "."));
+    return Number.isFinite(n) && n > 0 && n < 100_000_000 ? Math.round(n) : null;
+  };
+  const valor = num(x.valor);
+  if (!valor) return null;
+  // Una moneda que no se reconoce no se adivina: 300 euros no son 300 pesos.
+  const m = String(x.moneda || "").toUpperCase();
+  const moneda = /USD|US\$|DÓLAR|DOLAR/.test(m) ? "USD" : /UYU|PESO|\$U|^\$$/.test(m) ? "UYU" : null;
+  if (!moneda) return null;
+  let minimo = num(x.minimo), maximo = num(x.maximo);
+  if (!minimo || minimo > valor) minimo = null;
+  if (!maximo || maximo < valor) maximo = null;
+  const base = typeof x.base === "string" && x.base.trim() ? x.base.trim().slice(0, 200) : null;
+  return { valor, minimo, maximo, moneda, base };
 }
 
 /* De dónde sacó la descripción: sólo https y sin repetir. Lo que llega

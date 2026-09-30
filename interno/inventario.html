@@ -113,7 +113,7 @@ textarea { width:100%; padding:10px; border:1px solid var(--c-borde); border-rad
     <!-- Tanda 30: qué es lo de la foto, con Gemini (la función de Casa Verde) y la búsqueda de Google.
          Arranca solo con la primera foto de un producto nuevo; el botón lo
          repite. Lo que trae es una PROPUESTA: se revisa, se corrige y recién
-         «Guardar producto» lo escribe. Nunca trae precio. -->
+         «Guardar producto» lo escribe. Trae un precio SUGERIDO, con su rango y su base. -->
     <button type="button" class="btn secundario" id="btnIdentificar" style="display:none;">
       <span class="material-icons">auto_awesome</span> Buscar los datos de la foto
     </button>
@@ -157,7 +157,7 @@ iniciarAyuda("Cómo funciona el inventario", `
 <li><strong>Precio unitario:</strong> el precio por unidad que ve el comprador. <strong>Precio de lote:</strong> opcional, precio especial por llevarse todo el stock; el comprador además puede proponer otro valor por el lote.</li>
 <li><strong>Estado:</strong> automático según stock — con cantidad 0 aparece como agotado y deja de ofrecerse. No hace falta tocarlo: al validar ventas el stock se descuenta solo.</li>
 <li><strong>Fotos:</strong> por cámara o galería; se comprimen solas antes de subir.</li>
-<li><strong>Buscar los datos de la foto:</strong> con la primera foto de un producto nuevo, Gemini mira qué es, busca en internet la ficha del modelo y propone nombre, descripción y categoría. Llena lo que está vacío; lo demás lo muestra abajo para que elijas. <strong>Revisalo siempre</strong>: puede equivocarse, y lo que no ve no lo inventa. Nunca pone precio.</li>
+<li><strong>Buscar los datos de la foto:</strong> con la primera foto de un producto nuevo, Gemini mira qué es, busca en internet la ficha del modelo y propone título, descripción, categoría y un <strong>precio sugerido en Uruguay</strong> para esa pieza usada, con el rango y en qué se basó. Llena lo que está vacío; lo demás lo muestra abajo para que elijas. <strong>Revisalo siempre</strong>, sobre todo el precio: es una estimación de la IA, no un precio de mercado confirmado.</li>
 </ul>
 <h3>Lista de productos</h3>
 <p>Tocá una tarjeta para expandirla: <strong>Editar</strong> (modifica el producto), <strong>Historial</strong> (quién lo compró, cuándo y a qué precio) y <strong>Eliminar</strong> (definitivo; si el producto se vendió alguna vez, conviene dejarlo en cantidad 0 en vez de borrarlo, para conservar la referencia).</p>
@@ -361,6 +361,12 @@ function aplicarPropuesta(p, { soloVacios = false, categoria = false } = {}) {
   };
   campo("pNombre", p.nombre, "nombre");
   campo("pDescripcion", descripcionDe(p), "descripción");
+  // El precio, con su moneda: un número sin la moneda correcta sería otro precio.
+  if (p.precio && !(soloVacios && document.getElementById("pPrecio").value.trim())) {
+    document.getElementById("pMoneda").value = p.precio.moneda;
+    document.getElementById("pPrecio").value = p.precio.valor;
+    llenados.push("precio");
+  }
   if (p.categoria && (categoria || !soloVacios)) {
     const c = cats.find((x) => x.nombre.toLowerCase() === p.categoria.toLowerCase() && x.activa !== false);
     if (c) { document.getElementById("pCategoria").value = c.id; llenados.push("categoría"); }
@@ -379,6 +385,8 @@ function pintarPropuesta(r, llenados) {
     ${p.descripcion ? `<p style="margin:4px 0;white-space:pre-wrap;">${esc(p.descripcion)}</p>` : ""}
     ${p.especificaciones.length ? `<ul style="margin:4px 0;padding-left:18px;">${p.especificaciones.map((e) => `<li>${esc(e.dato)}: ${esc(e.valor)}</li>`).join("")}</ul>` : ""}
     ${p.estadoVisible ? `<p class="texto-suave" style="margin:4px 0;">Estado a la vista: ${esc(p.estadoVisible)}</p>` : ""}
+    ${p.precio ? `<p style="margin:6px 0 2px;"><strong>Precio sugerido: ${esc(fmtMoneda(p.precio.valor, p.precio.moneda))}</strong>${p.precio.minimo && p.precio.maximo ? ` <span class="texto-suave">(entre ${esc(fmtMoneda(p.precio.minimo, p.precio.moneda))} y ${esc(fmtMoneda(p.precio.maximo, p.precio.moneda))})</span>` : ""}</p>
+      <p class="texto-suave" style="margin:0 0 4px;">${p.precio.base ? esc(p.precio.base) + " · " : ""}Es una estimación de la IA: confirmala antes de guardar.</p>` : `<p class="texto-suave" style="margin:6px 0 4px;">Sin precio sugerido: no encontró con qué compararlo.</p>`}
     ${p.dudas.length ? `<p class="texto-suave" style="margin:4px 0;">⚠ Con dudas: ${esc(p.dudas.join(", "))}</p>` : ""}
     ${r.fuentes.length ? `<p class="texto-suave" style="margin:6px 0 0;">Fuentes: ${r.fuentes.map((f) => `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo)}</a>`).join(" · ")}</p>` : `<p class="texto-suave" style="margin:6px 0 0;">${r.buscoEnInternet ? "No encontró páginas con la ficha: es lo que se ve en la foto." : "Sin búsqueda en internet todavía: es lo que Gemini reconoce de la foto, sin páginas que lo respalden."}</p>`}
     <div class="fila" style="margin-top:8px;">

@@ -573,8 +573,8 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | `.env.example` | 1.0 | Los **nombres** de las cinco variables de entorno de Vercel. Nunca valores |
 | `vercel.json` | 1.0 | Que de Vercel salga **sólo** `/api`: cualquier otra dirección redirige a GitHub Pages, que es el sitio de verdad |
 | `api/_sesion.mjs` | 1.0 | La sesión de las funciones (tanda 30): verificar la firma RS256 del token, leer `usuarios/{uid}` con ese token, CORS con lista blanca. Salió de `tuya.mjs`. El `_` hace que Vercel no lo publique como ruta |
-| `interno/identificar.js` | 1.1 | La foto del inventario (tanda 30): arma el pedido a `claude-proxy` de Casa Verde con la búsqueda de Google, y lee lo que vuelve con desconfianza. **No importa nada**, así lo corre el banco. `utils.js` lo carga diferido |
-| `pruebas/identificar.mjs` | 1.1 | Banco de la foto: 12 casos, sin npm ni red. Prueba sobre todo lo que NO hace |
+| `interno/identificar.js` | 1.2 | La foto del inventario (tanda 30): arma el pedido a `claude-proxy` de Casa Verde con la búsqueda de Google, y lee lo que vuelve con desconfianza. **No importa nada**, así lo corre el banco. `utils.js` lo carga diferido |
+| `pruebas/identificar.mjs` | 1.2 | Banco de la foto: 13 casos, sin npm ni red. Prueba sobre todo lo que NO hace |
 | `api/tuya.mjs` | 1.1 | La única función de servidor. Verifica la firma RS256 del token de Firebase, lee `usuarios/{uid}` **con ese mismo token** (sin credencial de servidor), y recién ahí firma contra Tuya. Lista blanca de luces y de orígenes, freno por aparato |
 | `pruebas/luces.mjs` | 1.0 | Banco de pruebas del puente: 24 casos con la nube de Tuya, Firestore y las claves de Google simuladas. Firma tokens de verdad con un par de claves propio, así que la verificación que prueba es la real. `node pruebas/luces.mjs`, sin npm |
 | `comprador.html` | 2.3 | Catálogo (nombre + descripción, fotos ampliables), guía "¿Cómo comprar?", carrito, lote, propuesta, envío |
@@ -1110,7 +1110,7 @@ el sistema por andando.
 
 > **Entrega:** `interno/identificar.js` **1.1** (nuevo), `interno/utils.js` **v1.18**,
 > `interno/inventario.html`, `api/_sesion.mjs` 1.0 (nuevo) y `api/tuya.mjs` 1.1 (lo usa;
-> mismo comportamiento, 24/24), `pruebas/identificar.mjs` (12 casos). Y en Casa Verde,
+> mismo comportamiento, 24/24), `pruebas/identificar.mjs` (13 casos). Y en Casa Verde,
 > `claude-proxy` **v6**.
 
 **Qué pidió Mauro:** que al cargar la foto de un artículo, además de reducirla para
@@ -1128,7 +1128,12 @@ quedó en `_sesion.mjs`, porque no rompe nada y ordena las luces.
 - **`interno/identificar.js`** manda la foto reducida (800 px) a `claude-proxy` con
   `buscar: true`, y lee lo que vuelve: nombre, tipo, marca, modelo, descripción,
   especificaciones, una categoría **sólo si existe**, lo que se ve del estado, la
-  confianza, las dudas y las páginas de donde lo sacó. **Nunca un precio.**
+  confianza, las dudas y las páginas de donde lo sacó.
+- **Y un precio sugerido en Uruguay** (1.2, pedido de Mauro el mismo día: «un título,
+  descripción y un precio sugerido en Uruguay para esa pieza»). Valor, rango, moneda
+  (UYU o USD) y en qué se basó; el formulario llena «Precio unitario sugerido» con su
+  moneda y muestra el rango y la base. La 1.1 no traía precio por un criterio que no era
+  de Mauro. Sin fundamento, el precio va vacío; una moneda desconocida no se adivina.
 - **El modelo es `gemini-2.5-flash-lite`.** La primera prueba real con
   `gemini-2.5-flash` devolvió un JSON cortado: ése piensa antes de contestar y el
   pensamiento se come `max_tokens`.
