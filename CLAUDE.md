@@ -224,8 +224,8 @@ verdad después del cambio.
   pruebas/identificar.mjs`** (13 casos), los dos sin npm ni red, y se comprueba
   que parsee el JavaScript que vive adentro de los `.html`.
 - **Lo que trae Gemini es una PROPUESTA** (tanda 30): título, descripción,
-  categoría y un **precio sugerido en Uruguay** para esa pieza usada, con su
-  rango y en qué se basó. No escribe en la base: llena los campos vacíos del
+  categoría y un **precio sugerido en Uruguay** para esa pieza, **como nueva**
+  —lo son casi todas; si la foto muestra uso, lo dice—, con su rango y su base. No escribe en la base: llena los campos vacíos del
   formulario y la persona corrige y guarda. El precio se lee con desconfianza
   (`leerPrecio`): sin fundamento va vacío, y una moneda que no sea UYU o USD no
   se adivina. **La primera versión no traía precio y era un error mío**, no una

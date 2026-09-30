@@ -64,7 +64,7 @@ await prueba("un tipo de imagen raro se manda como jpeg", async () => {
 });
 await prueba("el prompt pide no inventar, un precio de Uruguay con fundamento, y trae las categorías y la pista", () => {
   const p = armarPrompt({ categorias: ["Repuestos"], pista: "motor de portón" });
-  assert.ok(/NO inventes/.test(p) && /Uruguay/.test(p) && /precio va null/.test(p) && /«Repuestos»/.test(p) && /motor de portón/.test(p));
+  assert.ok(/NO inventes/.test(p) && /Uruguay/.test(p) && /NUEVOS casi en su totalidad/.test(p) && /pieza NUEVA/.test(p) && !/pieza usada/.test(p) && /precio va null/.test(p) && /«Repuestos»/.test(p) && /motor de portón/.test(p));
 });
 
 titulo("Lo que vuelve");

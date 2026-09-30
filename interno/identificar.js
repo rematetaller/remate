@@ -22,8 +22,10 @@
 // ── LO QUE DEVUELVE ES UNA PROPUESTA ─────────────────────────────────
 // No escribe nada en la base. El formulario la muestra, la persona la
 // corrige, y guarda ella. Trae título, descripción y —desde la 1.2, pedido
-// de Mauro el mismo 30-sep— un PRECIO SUGERIDO EN URUGUAY para esa pieza
-// usada, con su rango y en qué se basó. La 1.1 no traía precio por un
+// de Mauro el mismo 30-sep— un PRECIO SUGERIDO EN URUGUAY para esa pieza,
+// con su rango y en qué se basó. Y desde la 1.3 la toma como NUEVA, que es
+// lo que son casi todas (Mauro, el mismo día): precio de nuevo en Uruguay, y
+// sólo si la foto muestra uso claro lo dice y lo marca como duda. La 1.1 no traía precio por un
 // criterio mío que Mauro no compartía: el formulario ya tiene «Precio
 // unitario sugerido» y quien carga lo tiene que poner igual. El precio que
 // viene de acá es un punto de partida a la vista, nunca un dato: se ve de
@@ -33,7 +35,7 @@
 // (`node pruebas/identificar.mjs`) sin navegador y sin Firebase.
 // =====================================================
 
-export const VERSION_IDENTIFICAR = "identificar-1.2";
+export const VERSION_IDENTIFICAR = "identificar-1.3";
 export const FUNCION_IA = "https://serene-scone-76bd4e.netlify.app/.netlify/functions/claude-proxy";
 // El mismo que usa la lectura de facturas por defecto. NO `gemini-2.5-flash`:
 // ése piensa antes de contestar y el pensamiento se come `max_tokens`, así
@@ -43,11 +45,12 @@ export const TIPOS = ["image/jpeg", "image/png", "image/webp"];
 
 export function armarPrompt({ categorias = [], pista = "" } = {}) {
   return [
-    "Sos el asistente de inventario de un remate de herramientas, máquinas, repuestos y artículos usados en Uruguay.",
+    "Sos el asistente de inventario de un remate de herramientas, máquinas, repuestos y otros artículos en Uruguay. Los artículos son NUEVOS casi en su totalidad.",
     "Te paso la foto de UN artículo. Hacé dos cosas:",
     "1) Identificá qué es: el tipo de artículo, y la marca y el modelo si se ven (placa, etiqueta, grabado).",
     "2) Buscá en internet la ficha de ese modelo para escribir la descripción técnica.",
-    "3) Sugerí un precio de venta EN URUGUAY para ESA pieza usada, en el estado que se ve, como se vendería en un remate o en MercadoLibre Uruguay (usados). Buscá publicaciones reales de Uruguay. Poné un valor, un mínimo y un máximo, la moneda en que se publica normalmente (UYU o USD) y en qué te basaste, en una línea.",
+    "3) Sugerí un precio de venta EN URUGUAY para esa pieza NUEVA: lo que cuesta nueva en comercios de Uruguay o en MercadoLibre Uruguay (publicaciones de artículos nuevos). Buscá publicaciones reales de Uruguay. Poné un valor, un mínimo y un máximo, la moneda en que se publica normalmente (UYU o USD) y en qué te basaste, en una línea.",
+    "Tomá el artículo como NUEVO. Sólo si la foto muestra uso claro (óxido, golpes, piezas faltantes, desgaste) decilo en \"estadoVisible\", poné \"estado\" en \"dudas\" y aclaralo en la base del precio.",
     "REGLAS: lo que no se ve en la foto ni encontrás, va null. NO inventes una marca ni un modelo. Si algo te genera duda, poné el nombre del campo en \"dudas\". Si no podés estimar un precio con algún fundamento, el precio va null: es mejor que un número inventado.",
     pista ? `La persona que carga el inventario anotó: «${String(pista).slice(0, 120)}». Tomalo como pista, no como verdad.` : "",
     "Devolvé SOLO un objeto JSON, sin texto antes ni después y sin ``` alrededor, con esta forma:",
@@ -57,7 +60,7 @@ export function armarPrompt({ categorias = [], pista = "" } = {}) {
       descripcion: "2 a 4 renglones: qué es, para qué sirve y sus datos técnicos principales",
       especificaciones: [{ dato: "Potencia", valor: "650 W" }],
       categoria: categorias.length ? "una de la lista de abajo, o null" : null,
-      estadoVisible: "lo que se ve del estado (óxido, piezas faltantes, golpes), o null",
+      estadoVisible: "null si se ve nuevo; si se ve usado, qué se ve (óxido, piezas faltantes, golpes)",
       precio: { valor: 0, minimo: 0, maximo: 0, moneda: "UYU | USD", base: "en qué te basaste, una línea" },
       confianza: "alta | media | baja", dudas: [],
     }),

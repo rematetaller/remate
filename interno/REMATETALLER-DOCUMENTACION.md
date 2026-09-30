@@ -573,7 +573,7 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | `.env.example` | 1.0 | Los **nombres** de las cinco variables de entorno de Vercel. Nunca valores |
 | `vercel.json` | 1.0 | Que de Vercel salga **sólo** `/api`: cualquier otra dirección redirige a GitHub Pages, que es el sitio de verdad |
 | `api/_sesion.mjs` | 1.0 | La sesión de las funciones (tanda 30): verificar la firma RS256 del token, leer `usuarios/{uid}` con ese token, CORS con lista blanca. Salió de `tuya.mjs`. El `_` hace que Vercel no lo publique como ruta |
-| `interno/identificar.js` | 1.2 | La foto del inventario (tanda 30): arma el pedido a `claude-proxy` de Casa Verde con la búsqueda de Google, y lee lo que vuelve con desconfianza. **No importa nada**, así lo corre el banco. `utils.js` lo carga diferido |
+| `interno/identificar.js` | 1.3 | La foto del inventario (tanda 30): arma el pedido a `claude-proxy` de Casa Verde con la búsqueda de Google, y lee lo que vuelve con desconfianza. **No importa nada**, así lo corre el banco. `utils.js` lo carga diferido |
 | `pruebas/identificar.mjs` | 1.2 | Banco de la foto: 13 casos, sin npm ni red. Prueba sobre todo lo que NO hace |
 | `api/tuya.mjs` | 1.1 | La única función de servidor. Verifica la firma RS256 del token de Firebase, lee `usuarios/{uid}` **con ese mismo token** (sin credencial de servidor), y recién ahí firma contra Tuya. Lista blanca de luces y de orígenes, freno por aparato |
 | `pruebas/luces.mjs` | 1.0 | Banco de pruebas del puente: 24 casos con la nube de Tuya, Firestore y las claves de Google simuladas. Firma tokens de verdad con un par de claves propio, así que la verificación que prueba es la real. `node pruebas/luces.mjs`, sin npm |
@@ -1134,6 +1134,9 @@ quedó en `_sesion.mjs`, porque no rompe nada y ordena las luces.
   (UYU o USD) y en qué se basó; el formulario llena «Precio unitario sugerido» con su
   moneda y muestra el rango y la base. La 1.1 no traía precio por un criterio que no era
   de Mauro. Sin fundamento, el precio va vacío; una moneda desconocida no se adivina.
+- **Como nueva** (1.3): «los artículos son nuevos casi en su totalidad». El precio es el
+  de la pieza nueva en Uruguay; si la foto muestra uso claro, lo dice en el estado, lo
+  marca como duda y lo aclara en la base del precio.
 - **El modelo es `gemini-2.5-flash-lite`.** La primera prueba real con
   `gemini-2.5-flash` devolvió un JSON cortado: ése piensa antes de contestar y el
   pensamiento se come `max_tokens`.
