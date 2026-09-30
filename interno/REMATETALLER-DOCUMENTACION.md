@@ -283,6 +283,13 @@ completo está en `REPORTES.md`, y lo que importa de acá son dos reglas:
   formulario es la que dice «esto es un síntoma», no «esto es lo que hay que
   hacer».
 
+### 3.21 · Claude le escribe por WhatsApp a quien lo pidió, y a nadie más
+Desde la **tanda 29**. La hoja de cuenta tiene «Mis avisos por WhatsApp»: cada uno
+guarda su número y su clave de CallMeBot en `avisos_contacto/{uid}` y elige si la
+ronda diaria le puede escribir. Es de la persona —la regla no deja que nadie más la
+lea ni la escriba—, y el agente la trae de a una para mandar un aviso. Qué merece un
+aviso y qué no: `protocolos/PROTOCOLO-AVISOS.md` del repo `datos`.
+
 ### 3.18 bis · La navegación va ABAJO, al alcance del pulgar
 Desde la **tanda 26**. La barra de secciones vive pegada al borde inferior de la pantalla,
 no arriba: en un teléfono la mano sostiene el aparato por abajo y el rincón superior
@@ -559,14 +566,14 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | Archivo | v | Qué es |
 |---|---|---|
 | `index.html` | 1.0 | Puerta pública: valida la llave (por link o a mano) y avisa por WhatsApp si no sirve |
-| `firestore.rules` | **0.7** | Copia de las reglas de la consola: default deny sin catch-all, `usuarios` cerrado, `activo` exigido, permisos aplicados en el servidor, venta inmutable, bloque de `documentos` y —desde la tanda 25— `lucesRegistro`. **Creado el 2026-09-07** copiando el texto real de la consola |
+| `firestore.rules` | **1.0** | Copia de las reglas de la consola: default deny sin catch-all, `usuarios` cerrado, `activo` exigido, permisos aplicados en el servidor, venta inmutable, bloque de `documentos`, —desde la tanda 25— `lucesRegistro`, el agente (v0.8), `reportes` (v0.9) y —desde la tanda 29— `avisos_contacto`. **Creado el 2026-09-07** copiando el texto real de la consola |
 | `LUCES.md` | 1.0 | El puente a Tuya: por qué hay un servidor en un proyecto estático, quién puede encender, la puesta en marcha en cuatro pasos y qué mirar cuando no anda |
 | `.env.example` | 1.0 | Los **nombres** de las cinco variables de entorno de Vercel. Nunca valores |
 | `vercel.json` | 1.0 | Que de Vercel salga **sólo** `/api`: cualquier otra dirección redirige a GitHub Pages, que es el sitio de verdad |
 | `api/tuya.mjs` | 1.0 | La única función de servidor. Verifica la firma RS256 del token de Firebase, lee `usuarios/{uid}` **con ese mismo token** (sin credencial de servidor), y recién ahí firma contra Tuya. Lista blanca de luces y de orígenes, freno por aparato |
 | `pruebas/luces.mjs` | 1.0 | Banco de pruebas del puente: 24 casos con la nube de Tuya, Firestore y las claves de Google simuladas. Firma tokens de verdad con un par de claves propio, así que la verificación que prueba es la real. `node pruebas/luces.mjs`, sin npm |
 | `comprador.html` | 2.3 | Catálogo (nombre + descripción, fotos ampliables), guía "¿Cómo comprar?", carrito, lote, propuesta, envío |
-| `interno/utils.js` | **1.13** | Núcleo: Firebase, auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, teléfonos, **`PUENTE_LUCES` + `lucesEstado()` / `lucesMandar()`**, helpers |
+| `interno/utils.js` | **1.17** | Núcleo: Firebase (SDK diferido), auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app / reportar / mis avisos por WhatsApp**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, teléfonos, **`PUENTE_LUCES` + `lucesEstado()` / `lucesMandar()`**, helpers |
 | `interno/design-system.css` | **1.1** | Estilos mobile-first |
 | `interno/documentos.html` | — | Libretas de propiedad: alta, listado y consulta. Exige el permiso `documentos`. **Faltaba en este inventario** hasta el 2026-09-07 |
 | `interno/diagnostico.html` | **2.2** | Prueba las conexiones reales del panel y **que las reglas estén publicadas**. Sin ítem en la barra y **sin depender del núcleo**: se abre escribiendo la dirección y carga aunque `utils.js` esté roto |
@@ -1091,6 +1098,41 @@ el sistema por andando.
 >
 > **La lección, que vale más que las siete entradas:** un registro no se detiene con un
 > aviso. Se detiene en silencio, y lo que se rompe después no parece tener nada que ver.
+
+---
+
+## v0.5.21 — Mis avisos por WhatsApp (Tanda 29 · 30-sep-2026)
+
+> **Entrega:** `interno/utils.js` **v1.17**, `firestore.rules` **v1.0**.
+> **Ninguna página se tocó:** la hoja vive en la de cuenta, como el reporte.
+> Línea `L-avisos` del panel. **La tanda 28 (`utils.js` v1.16, el SDK diferido)
+> no tiene entrada en este libro**: está en la cabecera de `utils.js` y en el
+> `CLAUDE.md`. Se dice acá para que el hueco no parezca otra cosa.
+
+**Qué pidió Mauro:** que Claude —la ronda diaria, unificada en su chat para todo el
+ecosistema— pueda mandarle un aviso por WhatsApp a quien lo necesite, en cada sitio y
+no sólo en Casa Verde, donde CallMeBot ya andaba.
+
+**Qué se hizo:**
+
+- **«Mis avisos por WhatsApp» en la hoja de cuenta.** Cada persona guarda su número y
+  su clave de CallMeBot en `avisos_contacto/{uid}` —la misma colección y la misma forma
+  que Casa Verde y CasaYourte— y elige si la ronda le puede escribir (`agente`).
+  **Probar** manda un WhatsApp de prueba por la función de Netlify de Casa Verde, que es
+  el puente de todo el ecosistema: el destinatario viaja en el pedido. Y la respuesta de
+  CallMeBot se **lee** (`leerRespuestaWa`), porque contesta 200 aunque rechace.
+- **Reglas v1.0.** `avisos_contacto` es de su dueño: la lee y la escribe sólo él, con
+  los campos contados (`hasOnly`). El agente sale del comodín de lectura para esta
+  colección y tiene un `get` propio: trae UNA persona por vez, nunca la lista, y no
+  escribe — el consentimiento lo da la persona.
+
+**Qué NO se hizo, a propósito:** que el panel le avise a otro desde el navegador, como
+hace Casa Verde con sus eventos. Acá no hay eventos que lo pidan todavía, y abrir la
+lectura del equipo sería exponer las claves de todos para nada.
+
+**Qué falta:** que Mauro publique las reglas v1.0 (panel → Sitios → remate), y que cada
+uno cargue su número. Los criterios —qué merece un aviso, qué no puede llevar el texto,
+el tope de tres por día— están en `protocolos/PROTOCOLO-AVISOS.md` del repo `datos`.
 
 ---
 

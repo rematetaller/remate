@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.16)
+// utils.js — Núcleo compartido de remateTaller (v1.17)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 //
@@ -12,6 +12,14 @@
 // y mientras tanto el inventario derivó y las reglas quedaron dos
 // versiones atrás sin que nada avisara. Si volvés a anotar un cambio
 // acá, anotalo también allá, en la misma tanda.
+//
+// v1.17 (tanda 29, 30-sep-2026):
+//  · MIS AVISOS POR WHATSAPP, en la hoja de cuenta. Cada persona guarda su
+//    número y su clave de CallMeBot en `avisos_contacto/{uid}` —misma
+//    colección y forma que Casa Verde— y elige si Claude, la ronda diaria del
+//    agente, le puede escribir. La prueba manda por la función de Netlify de
+//    Casa Verde, el puente de todo el ecosistema. Reglas v1.0. Criterios en
+//    protocolos/PROTOCOLO-AVISOS.md del repo `datos`.
 //
 // v1.16 (tanda 28):
 //  · EL SDK DE FIREBASE SE CARGA DIFERIDO. Era el hallazgo A2 de la primera
@@ -746,6 +754,24 @@ const CSS_CUENTA = `
 #rtRep .rt-seg button.activo { border-color:var(--c-primario, #b45309);
   background:var(--c-primario-claro, #fef3e2); color:var(--c-primario, #b45309);
   font-weight:600; }
+/* Mis avisos (v1.17): la misma hoja que el reporte, con otro id. */
+#rtAv { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
+  z-index:550; align-items:flex-end; justify-content:center; }
+#rtAv .rt-caja { background:var(--c-superficie, #fff); width:100%; max-width:540px;
+  border-radius:16px 16px 0 0; padding:16px 18px 26px; max-height:88dvh; overflow:auto; }
+#rtAv .rt-nombre { font-weight:600; font-size:17px; }
+#rtAv .rt-nota { font-size:12px; color:var(--c-texto-suave, #666); margin:6px 0 0; }
+#rtAv .rt-etq { display:block; font-size:13px; font-weight:600; margin:12px 0 4px; }
+#rtAv input { width:100%; box-sizing:border-box; font:inherit; font-size:16px;
+  padding:10px; border:1px solid var(--c-borde, #ddd); border-radius:10px;
+  background:var(--c-fondo, #f4f4f2); color:inherit; }
+#rtAv .rt-seg { display:flex; gap:6px; }
+#rtAv .rt-seg button { flex:1; min-height:42px; font:inherit; font-size:13px;
+  border:1px solid var(--c-borde, #ddd); border-radius:10px; cursor:pointer;
+  background:var(--c-superficie, #fff); color:var(--c-texto-suave, #666); }
+#rtAv .rt-seg button.activo { border-color:var(--c-primario, #b45309);
+  background:var(--c-primario-claro, #fef3e2); color:var(--c-primario, #b45309);
+  font-weight:600; }
 .rt-bloqueo { position:fixed; inset:0; background:var(--c-fondo, #f4f4f2); z-index:700;
   display:flex; align-items:center; justify-content:center; padding:24px; }
 .rt-bloqueo-caja { max-width:420px; text-align:center; }
@@ -782,6 +808,9 @@ function asegurarHojaCuenta() {
         '<span class="material-icons">bug_report</span>Reportar una falla</button>' +
       '<div class="rt-nota">Lo que escribas llega al panel de Mauro, con la página ' +
         'donde estabas. Para que no haya que contarlo dos veces.</div>' +
+      '<button class="rt-fila" id="rtFilaAvisos">' +
+        '<span class="material-icons">chat</span>Mis avisos por WhatsApp</button>' +
+      '<div class="rt-nota">Si querés que Claude te escriba, y a qué número.</div>' +
       '<button class="rt-fila" id="rtFilaReparar">' +
         '<span class="material-icons">healing</span>Reparar la app</button>' +
       '<div class="rt-nota">Borra cachés y sesión de este teléfono. No toca los datos.</div>' +
@@ -796,6 +825,8 @@ function asegurarHojaCuenta() {
     .addEventListener("click", repararApp);
   document.getElementById("rtFilaReportar")
     .addEventListener("click", () => { m.style.display = "none"; mostrarReporte(); });
+  document.getElementById("rtFilaAvisos")
+    .addEventListener("click", () => { m.style.display = "none"; mostrarAvisos(); });
 }
 
 // =====================================================
@@ -903,6 +934,159 @@ async function enviarReporte() {
     est.textContent = "No se pudo enviar: " + (e && e.message ? e.message : e);
     b.disabled = false;
   }
+}
+
+// =====================================================
+// MIS AVISOS POR WHATSAPP (v1.17)
+//
+// Cada persona guarda SU número y SU clave de CallMeBot, y decide si Claude
+// —la ronda diaria del agente— le puede escribir. El agente lee el documento
+// de una persona por vez desde datos/herramientas/avisos.mjs, y los criterios
+// (qué merece un WhatsApp, tres por día como mucho, sin teléfonos ni plata en
+// el texto) están en protocolos/PROTOCOLO-AVISOS.md del repo `datos`.
+//
+// La prueba va por la función de Netlify de Casa Verde: el destinatario viaja
+// en el pedido, así que sirve para todo el ecosistema sin configurar nada.
+// Y CallMeBot contesta 200 aunque rechace (cuenta en pausa, clave mala): la
+// respuesta se LEE, como hace Casa Verde con `CV2._leerRespuestaWa`.
+// =====================================================
+export const PUENTE_WA = "https://serene-scone-76bd4e.netlify.app/.netlify/functions/notify-whatsapp";
+
+export function leerRespuestaWa(txt) {
+  const crudo = String(txt || "");
+  const b = crudo.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+  if (b.includes("paused") || b.includes("pausada"))
+    return { ok: false, detalle: "Tu cuenta de CallMeBot está en pausa: mandale «resume» al bot desde tu WhatsApp." };
+  if (b.includes("apikey") && (b.includes("not valid") || b.includes("invalid") || b.includes("missing") || b.includes("wrong")))
+    return { ok: false, detalle: "CallMeBot no acepta esa clave. Mandale «Recover APIKey» al bot y te la reenvía." };
+  if (b.includes("not found") || b.includes("no registrado") || b.includes("not registered"))
+    return { ok: false, detalle: "Ese número no está dado de alta en CallMeBot." };
+  if (b.includes("limit") || b.includes("too many"))
+    return { ok: false, detalle: "CallMeBot frenó por límite de uso. Probá en un rato." };
+  if (crudo.toLowerCase().includes("color:red")) return { ok: false, detalle: b.slice(0, 200) };
+  return { ok: true, detalle: b.slice(0, 200) };
+}
+
+// El '+' se guarda porque se lee mejor y viaja SIN él: es la forma que el
+// propio bot entrega y la probada en Casa Verde.
+const telAviso = (v) => { const d = String(v || "").replace(/[^\d]/g, ""); return d ? "+" + d : ""; };
+
+function asegurarHojaAvisos() {
+  asegurarEstilosCuenta();
+  if (document.getElementById("rtAv")) return;
+  const m = document.createElement("div");
+  m.id = "rtAv";
+  m.innerHTML =
+    '<div class="rt-caja">' +
+      '<div class="rt-nombre">Mis avisos por WhatsApp</div>' +
+      '<div class="rt-nota">Claude, la IA que recoge los reportes, te puede escribir ' +
+        'por WhatsApp cuando aparezca algo que te toca: una falla que reportaste quedó ' +
+        'arreglada, o hace falta que contestes algo. Como mucho tres por día, y sin ' +
+        'datos sensibles en el texto.</div>' +
+      '<label class="rt-etq">¿Querés que Claude te escriba?</label>' +
+      '<div class="rt-seg" id="rtAvAgente">' +
+        '<button type="button" data-v="no" class="activo">No</button>' +
+        '<button type="button" data-v="si">Sí, que me escriba</button>' +
+      "</div>" +
+      '<label class="rt-etq" for="rtAvTel">Tu número, con código de país</label>' +
+      '<input type="tel" id="rtAvTel" inputmode="tel" maxlength="20" placeholder="+59899123456">' +
+      '<label class="rt-etq" for="rtAvKey">Tu clave de CallMeBot</label>' +
+      '<input type="text" id="rtAvKey" maxlength="40" autocomplete="off" placeholder="1234567">' +
+      '<div class="rt-nota">¿No tenés clave? Buscá el número del bot en ' +
+        'callmebot.com/blog/free-api-whatsapp-messages/ (cambia cada tanto), y desde tu ' +
+        'WhatsApp mandale exactamente: I allow callmebot to send me messages. Te contesta ' +
+        'con tu clave. Si otro sitio ya te avisa por CallMeBot, es la misma.</div>' +
+      '<div class="rt-nota">Tu número y tu clave los ve sólo tu cuenta, y Claude para ' +
+        'escribirte. Para cortar todo: No, acá arriba, o mandale stop al bot.</div>' +
+      '<div class="rt-nota" id="rtAvEstado"></div>' +
+      '<div style="display:flex;gap:8px;margin-top:12px">' +
+        '<button class="btn secundario" id="rtAvProbar" style="flex:1">Probar</button>' +
+        '<button class="btn" id="rtAvGuardar" style="flex:1">Guardar</button>' +
+      "</div>" +
+    "</div>";
+  document.body.appendChild(m);
+  m.addEventListener("click", (e) => { if (e.target === m) m.style.display = "none"; });
+  m.querySelector("#rtAvAgente").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    m.querySelectorAll("#rtAvAgente button").forEach((x) => x.classList.toggle("activo", x === b));
+  });
+  m.querySelector("#rtAvTel").addEventListener("blur", (e) => { e.target.value = telAviso(e.target.value); });
+  document.getElementById("rtAvGuardar").addEventListener("click", guardarAvisos);
+  document.getElementById("rtAvProbar").addEventListener("click", probarAvisos);
+}
+
+function elegirAgente(v) {
+  document.querySelectorAll("#rtAvAgente button").forEach((x) => x.classList.toggle("activo", x.dataset.v === v));
+}
+
+export async function mostrarAvisos() {
+  asegurarHojaAvisos();
+  const est = document.getElementById("rtAvEstado");
+  document.getElementById("rtAvTel").value = "";
+  document.getElementById("rtAvKey").value = "";
+  elegirAgente("no");
+  est.textContent = "Cargando…";
+  document.getElementById("rtAv").style.display = "flex";
+  try {
+    await cargarFirebase();
+    const d = await getDoc(doc(db, "avisos_contacto", _usuario.uid));
+    const c = d.exists() ? (d.data() || {}) : {};
+    document.getElementById("rtAvTel").value = c.telefono || "";
+    document.getElementById("rtAvKey").value = c.apikey || "";
+    elegirAgente(c.agente === true ? "si" : "no");
+    est.textContent = c.telefono && c.apikey ? "Tu número está guardado." : "";
+  } catch (e) {
+    est.textContent = "No se pudo leer lo guardado: " + (e && e.message ? e.message : e);
+  }
+}
+
+async function guardarAvisos() {
+  const est = document.getElementById("rtAvEstado");
+  const tel = telAviso(document.getElementById("rtAvTel").value);
+  const key = document.getElementById("rtAvKey").value.trim();
+  const agente = document.querySelector("#rtAvAgente button.activo").dataset.v === "si";
+  if (agente && tel.length < 9) { est.textContent = "El número parece corto: va con el código de país, por ejemplo +59899123456."; return; }
+  if (agente && !/^[A-Za-z0-9_-]{4,40}$/.test(key)) { est.textContent = "Falta la clave de CallMeBot (mirá cómo conseguirla, acá arriba)."; return; }
+  const b = document.getElementById("rtAvGuardar");
+  b.disabled = true; est.textContent = "Guardando…";
+  try {
+    await cargarFirebase();
+    await setDoc(doc(db, "avisos_contacto", _usuario.uid), {
+      telefono: tel, apikey: key, nombre: _usuario.nombre || "", agente,
+      actualizadoEn: serverTimestamp()
+    }, { merge: true });
+    document.getElementById("rtAvTel").value = tel;
+    est.textContent = agente ? "Guardado. Tocá Probar para confirmar que llega." : "Guardado: Claude no te escribe.";
+  } catch (e) {
+    est.textContent = "No se pudo guardar: " + (e && e.message ? e.message : e);
+  }
+  b.disabled = false;
+}
+
+async function probarAvisos() {
+  const est = document.getElementById("rtAvEstado");
+  const tel = telAviso(document.getElementById("rtAvTel").value);
+  const key = document.getElementById("rtAvKey").value.trim();
+  if (!tel || !key) { est.textContent = "Primero tu número y tu clave."; return; }
+  const b = document.getElementById("rtAvProbar");
+  b.disabled = true; est.textContent = "Mandando…";
+  try {
+    const r = await fetch(PUENTE_WA, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "Prueba de remateTaller: si leés esto, tu WhatsApp está listo para los avisos.",
+                             phone: tel.replace(/[^\d]/g, ""), apikey: key })
+    });
+    const d = await r.json().catch(() => null);
+    if (!d || d.ok !== true) est.textContent = "No salió: " + ((d && d.error) || ("el servidor contestó " + r.status));
+    else {
+      const x = leerRespuestaWa(d.respuesta);
+      est.textContent = x.ok ? "Mandado. Si en un minuto no llega, el problema es de CallMeBot. Contestó: " + x.detalle : x.detalle;
+    }
+  } catch (e) {
+    est.textContent = "No salió: " + (e && e.message ? e.message : e);
+  }
+  // CallMeBot deja uno por minuto al mismo número.
+  setTimeout(() => { b.disabled = false; }, 60000);
 }
 
 export function mostrarCuenta() {

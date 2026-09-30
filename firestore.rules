@@ -1,6 +1,16 @@
 // =====================================================
-// remateTaller — Reglas de Firestore v0.9 (12-sep-2026)
+// remateTaller — Reglas de Firestore v1.0 (30-sep-2026)
 // Se pegan COMPLETAS en la consola. Nunca por fragmentos.
+//
+// Cambios respecto de la v0.9:
+//  · Entra `avisos_contacto/{uid}`: los avisos de Claude por WhatsApp.
+//    Cada persona guarda SU número y SU clave de CallMeBot desde su hoja de
+//    cuenta → «Mis avisos por WhatsApp», y elige si la ronda diaria le puede
+//    escribir (`agente`). Es de ella: la lee y la escribe sólo su dueño. El
+//    agente trae el documento de UNA persona por vez (`get`, nunca `list`)
+//    y no lo escribe; por eso sale del comodín de lectura del agente. Misma
+//    colección, misma forma que Casa Verde y CasaYourte. Criterios en
+//    protocolos/PROTOCOLO-AVISOS.md del repo `datos`.
 //
 // Cambios respecto de la v0.7:
 //  0. Entra el AGENTE DE CLAUDE CODE, con lectura y una bóveda.
@@ -127,7 +137,7 @@ service cloud.firestore {
     }
 
     match /{coleccion}/{resto=**} {
-      allow read: if esAgente() && !(coleccion in ['llaves', 'documentos']);
+      allow read: if esAgente() && !(coleccion in ['llaves', 'documentos', 'avisos_contacto']);
     }
 
     // ---------- Usuarios: el documento que manda ----------
@@ -287,6 +297,20 @@ service cloud.firestore {
                     && request.resource.data.texto == resource.data.texto
                     && request.resource.data.uid == resource.data.uid;
       allow delete: if esAdmin();
+    }
+
+    // ---------- Avisos por WhatsApp (v1.0) ----------
+    // El número y la clave de CallMeBot de cada persona. Una clave de
+    // CallMeBot sólo sirve para mandarle mensajes al número que la generó.
+    // Acá ninguna pantalla le avisa a otro desde el navegador, así que el
+    // resto del equipo no lo necesita leer.
+    match /avisos_contacto/{uid} {
+      allow get: if (activo() && request.auth.uid == uid) || esAgente();
+      allow create, update: if activo() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(
+             ['telefono', 'apikey', 'nombre', 'agente', 'actualizadoEn', 'agenteEn'])
+        && (!('agente' in request.resource.data) || request.resource.data.agente is bool);
+      allow delete: if activo() && request.auth.uid == uid;
     }
 
     // Sin catch-all: cualquier colección nueva entra con su bloque, en la
