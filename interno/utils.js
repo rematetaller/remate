@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.17)
+// utils.js — Núcleo compartido de remateTaller (v1.18)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 //
@@ -12,6 +12,15 @@
 // y mientras tanto el inventario derivó y las reglas quedaron dos
 // versiones atrás sin que nada avisara. Si volvés a anotar un cambio
 // acá, anotalo también allá, en la misma tanda.
+//
+// v1.18 (tanda 30, 30-sep-2026):
+//  · QUÉ ES LO DE LA FOTO. `identificarFoto()` manda la foto del inventario
+//    —la misma reducida a 800 px que va a Cloudinary— a la segunda función
+//    de Vercel (`api/identificar.mjs`), que le pregunta a Gemini, con la
+//    búsqueda de Google, qué es y cómo se describe. Devuelve una PROPUESTA
+//    que el formulario muestra para corregir; no escribe nada. La dirección
+//    sale de PUENTE_LUCES: es el mismo proyecto de Vercel, así que al
+//    crearlo se edita UNA línea y quedan las dos.
 //
 // v1.17 (tanda 29, 30-sep-2026):
 //  · MIS AVISOS POR WHATSAPP, en la hoja de cuenta. Cada persona guarda su
@@ -271,6 +280,9 @@ export const CLOUDINARY = {
 // Vacío = la pantalla de luces lo dice y explica qué falta, en vez de
 // fallar con un error de red que no significa nada. Ver LUCES.md.
 export const PUENTE_LUCES = "";
+// La función que identifica la foto del inventario vive en el MISMO
+// proyecto de Vercel (tanda 30): su dirección se deduce de la de arriba.
+export const PUENTE_IDENTIFICAR = PUENTE_LUCES ? PUENTE_LUCES.replace(/\/api\/tuya\/?$/, "/api/identificar") : "";
 
 // =====================================================
 // AUTENTICACIÓN Y CONTROL DE ACCESO (admins)
@@ -1547,7 +1559,8 @@ const SIN_PUENTE = "Falta configurar la dirección del puente de luces " +
   "(PUENTE_LUCES en utils.js). Ver LUCES.md.";
 
 async function llamarPuente(opciones = {}) {
-  if (!PUENTE_LUCES) return { ok: false, motivo: SIN_PUENTE, sinConfigurar: true };
+  const destino = opciones.url || PUENTE_LUCES;
+  if (!destino) return { ok: false, motivo: opciones.sinPuente || SIN_PUENTE, sinConfigurar: true };
   // Ídem: `luces.html` entra por `verificarAuth`, pero sin esto un `auth`
   // todavía en `undefined` tiraría un TypeError en vez del mensaje claro.
   try { await cargarFirebase(); }
@@ -1565,9 +1578,9 @@ async function llamarPuente(opciones = {}) {
   // Un corte corto a propósito: si la nube de Tuya se queda pensando, la
   // pantalla tiene que poder decirlo, no quedarse girando para siempre.
   const corte = new AbortController();
-  const reloj = setTimeout(() => corte.abort(), 12000);
+  const reloj = setTimeout(() => corte.abort(), opciones.esperaMs || 12000);
   try {
-    const r = await fetch(PUENTE_LUCES, {
+    const r = await fetch(destino, {
       method: opciones.metodo || "GET",
       headers: Object.assign(
         { Authorization: "Bearer " + token },
@@ -1606,4 +1619,29 @@ export function lucesEstado() {
 /** Encender o apagar una luz. → { ok:true, luz, label, encendida } */
 export function lucesMandar(alias, encender) {
   return llamarPuente({ metodo: "POST", cuerpo: { luz: alias, encender: !!encender } });
+}
+
+/**
+ * Qué es lo de la foto (tanda 30). Reduce la foto a 800 px —la misma
+ * medida que va a Cloudinary— y se la manda a Gemini por la función de
+ * Vercel, con la búsqueda de Google. → { ok:true, producto:{ nombre, tipo,
+ * marca, modelo, descripcion, especificaciones, categoria, estadoVisible,
+ * confianza, dudas }, fuentes:[{titulo,url}] }. Es una PROPUESTA: no escribe
+ * nada, y nunca trae precio.
+ */
+export async function identificarFoto(file, { categorias = [], pista = "" } = {}) {
+  if (!PUENTE_IDENTIFICAR) return { ok: false, sinConfigurar: true,
+    motivo: "La búsqueda con Gemini todavía no está configurada (falta el proyecto de Vercel). Cargalo a mano." };
+  const blob = await comprimirImagen(file, 800);
+  const imagen = await new Promise((resolve, reject) => {
+    const lector = new FileReader();
+    lector.onload = () => resolve(String(lector.result).split(",")[1] || "");
+    lector.onerror = () => reject(new Error("No se pudo leer la foto."));
+    lector.readAsDataURL(blob);
+  }).catch(() => "");
+  if (!imagen) return { ok: false, motivo: "No se pudo leer la foto." };
+  const mime = ["image/jpeg", "image/png", "image/webp"].includes(blob.type) ? blob.type : "image/jpeg";
+  // Buscar en internet tarda más que prender una luz: 30 segundos de margen.
+  return llamarPuente({ url: PUENTE_IDENTIFICAR, metodo: "POST", esperaMs: 30000,
+    cuerpo: { imagen, mime, categorias, pista } });
 }

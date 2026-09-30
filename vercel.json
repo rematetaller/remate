@@ -6,5 +6,10 @@
       "destination": "https://rematetaller.github.io/remate/",
       "permanent": false
     }
-  ]
+  ],
+  "functions": {
+    "api/identificar.mjs": {
+      "maxDuration": 30
+    }
+  }
 }

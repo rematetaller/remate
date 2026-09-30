@@ -8,14 +8,23 @@ HTML/CSS/JS servido tal cual, módulos ES por CDN, sin build, sin npm, sin
 `rematetaller/remate` — lo que se sube queda en vivo, sin etapa intermedia.
 No hay workflows propios (no existe carpeta `.github/`).
 
-**Hay exactamente UNA función de servidor, desde el 2026-09-09** (tanda 25):
-`api/tuya.mjs`, desplegada en **Vercel** desde este mismo repositorio, que
-enciende y apaga las luces del depósito. Existe porque la nube de Tuya exige
-firmar cada pedido con un secreto (HMAC-SHA256), y un secreto en el navegador
-no es un secreto. **El sitio no se mudó a Vercel:** GitHub Pages sigue
-publicando todo, y Vercel sirve únicamente `/api/tuya` — cualquier otra
-dirección de ese dominio redirige al sitio real (`vercel.json`). Todo lo demás
-del proyecto sigue siendo estático puro. El detalle está en `LUCES.md`.
+**Hay DOS funciones de servidor**, las dos en **Vercel** desde este mismo
+repositorio y por el mismo motivo: un secreto en el navegador no es un secreto.
+`api/tuya.mjs` (tanda 25, 2026-09-09) enciende y apaga las luces del depósito
+—Tuya exige firmar cada pedido con HMAC-SHA256—, y `api/identificar.mjs`
+(tanda 30, 2026-09-30) le pregunta a **Gemini, con la búsqueda de Google**, qué
+es lo de la foto del inventario y cómo se describe. Las dos verifican la sesión
+con `api/_sesion.mjs` (Vercel no publica los archivos que empiezan con `_`).
+**El sitio no se mudó a Vercel:** GitHub Pages sigue publicando todo, y Vercel
+sirve únicamente `/api/…` — cualquier otra dirección de ese dominio redirige al
+sitio real (`vercel.json`). El detalle de las luces está en `LUCES.md`.
+
+**Ojo: hasta la tanda 30 Gemini NO estaba integrado en el sitio.** Las libretas
+se leen a mano —la foto va al chat de Gemini con `interno/prompt-libretas.md` y
+el JSON se pega en `documentos.html`—. `identificar.mjs` es la primera vez que
+el panel habla con Gemini, y **el proyecto de Vercel todavía no existe**
+(`PUENTE_LUCES` vale `""`): hasta que Mauro lo cree, el botón dice que falta y
+el formulario se carga a mano como siempre.
 
 > **Y no es un descuido, es una decisión.** El 2026-09-07 se agregó un
 > `.github/workflows/main.yml` con `anthropics/claude-code-action`, para intentar
@@ -61,7 +70,8 @@ un archivo después no alcanza. Este proyecto documenta acá solo nombres, tipo 
 ubicación del valor real — nunca el valor.
 
 ¿Usa variables de entorno? **Sí, desde el 2026-09-09** — las lee `api/tuya.mjs`
-en Vercel, y son las cinco primeras del proyecto. Hasta esa fecha la respuesta
+en Vercel, y eran las cinco primeras del proyecto; desde la tanda 30 se suman
+las dos de Gemini, que lee `api/identificar.mjs`. Hasta esa fecha la respuesta
 era «no», y era correcta: no había función que las leyera. Siguen sin existir
 GitHub Secrets, porque sigue sin haber workflows que los consuman.
 
@@ -82,6 +92,9 @@ siguen pendientes, y si algún día entran, sus variables se agregan a esta tabl
 | `TUYA_REGION` | Centro de datos de Tuya: `us`/`eu`/`cn`/`in` (por defecto `us`) | configuración, no secreto | Vercel → mismo proyecto | `api/tuya.mjs` | `api/tuya.mjs:65`, 2026-09-09 |
 | `TUYA_LUCES` | JSON alias → identificador del aparato, etiqueta y comando. El panel manda el **alias**; el identificador real no sale del servidor | configuración con datos internos | Vercel → mismo proyecto | `api/tuya.mjs` | `api/tuya.mjs:70`, 2026-09-09 |
 | `ORIGENES_PERMITIDOS` | Desde qué direcciones se acepta un pedido (CORS). Lista blanca: un `*` acá dejaría que cualquier página del mundo usara la sesión de quien la visite | configuración de seguridad | Vercel → mismo proyecto. Por defecto `https://rematetaller.github.io` | `api/tuya.mjs` | `api/tuya.mjs:90`, 2026-09-09 |
+| `GEMINI_API_KEY` | Clave de la API de Gemini (Google AI Studio): identifica la foto del inventario y busca su ficha en internet | secreto de infraestructura | Vercel → mismo proyecto → Environment Variables. **La carga Mauro a mano**, nunca un chat | `api/identificar.mjs` | escrito el 2026-09-30; **sin cargar todavía** |
+| `GEMINI_MODELO` | Qué modelo de Gemini usar. Opcional, por defecto `gemini-2.5-flash` | configuración, no secreto | Vercel → mismo proyecto | `api/identificar.mjs` | 2026-09-30 |
+| `PUENTE_IDENTIFICAR` | La dirección de la función de la foto. Sale sola de `PUENTE_LUCES` (mismo proyecto de Vercel), así que no se edita aparte | público por diseño | `interno/utils.js` | `inventario.html` vía `identificarFoto()` | 2026-09-30 |
 | `PUENTE_LUCES` | La dirección de la función. **No es un secreto** —sin un token de Firebase válido no hace nada— y por eso vive en el código, no en el entorno | público por diseño | `interno/utils.js`, una sola línea. Se edita a mano al crear el proyecto en Vercel | `luces.html` vía `utils.js` | `interno/utils.js:265`, 2026-09-14 |
 | Credencial de servidor de Firebase (*service account*) | Le permitiría a la función leer toda la base | **ausente por diseño** | No existe. La función lee `usuarios/{uid}` con el token de la propia persona, así que no puede leer nada que ella no pudiera leer. Un service account sería una llave maestra de ventas, documentos y llaves para prender una luz | Nadie | ausencia confirmada en todo el repo, 2026-09-09 |
 | Reglas de Firestore | Autoridad real de acceso | configuración de seguridad (copia en repo, autoridad en consola) | La autoridad sigue siendo lo publicado en la **consola de Firebase**. La copia vive en `/firestore.rules` (raíz), **v1.0** (2026-09-30, entra `avisos_contacto`; la v0.9 es la publicada hasta que Mauro pegue ésta) | Firestore | **v0.9 publicada por Mauro el 2026-09-13** (`remate:L6` en el panel). Verificado desde una sesión lo que se puede verificar: el agente entra y `reportes/` contesta. Que lo publicado sea exactamente la v0.9 sólo lo confirma él — el acceso del agente acá es un comodín con exclusiones, así que leer una colección no distingue una versión de otra |
@@ -204,13 +217,20 @@ verdad después del cambio.
   en un módulo ES deja la página en blanco, sin nada que explique por qué.
 - **Material Icons antes de `design-system.css`** en el `<head>` (§ 3.14).
 - La PWA es **del panel**, no del catálogo público (§ 3.17).
-- **Las luces son la única pieza con servidor.** El panel manda un alias y su
+- **Las luces fueron la primera pieza con servidor.** El panel manda un alias y su
   token de sesión; `api/tuya.mjs` verifica el token, lee `usuarios/{uid}` con
   *ese mismo token* y recién ahí firma contra Tuya. Nada de credenciales del
   lado del cliente, y nada de credenciales de servidor de Firebase del lado del
   puente. Ver `LUCES.md`.
-- **Antes de subir se corre `node pruebas/luces.mjs`** (24 casos, sin npm), y
-  se comprueba que parsee el JavaScript que vive adentro de los `.html`.
+- **Antes de subir se corren `node pruebas/luces.mjs`** (24 casos) **y `node
+  pruebas/identificar.mjs`** (14 casos), los dos sin npm ni red, y se comprueba
+  que parsee el JavaScript que vive adentro de los `.html`.
+- **Lo que trae Gemini es una PROPUESTA, y no trae precios** (tanda 30). No
+  escribe en la base: llena los campos vacíos del formulario, muestra de dónde
+  sacó la descripción y la persona corrige y guarda. Poner precio es el permiso
+  `validar`, no el de inventario, y un precio de internet para un usado de
+  remate sería una promesa falsa. La función exige el permiso `inventario`
+  (o admin), igual que la pantalla.
 - **Si el sitio pasa a dominio propio** (§ 12.2), `ORIGENES_PERMITIDOS` cambia
   en la misma tanda o las luces dejan de responder sin aviso.
 

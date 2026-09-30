@@ -110,6 +110,15 @@ textarea { width:100%; padding:10px; border:1px solid var(--c-borde); border-rad
     <div class="thumbs" id="thumbs"></div>
     <p class="texto-suave" id="estadoFotos" style="display:none;"></p>
 
+    <!-- Tanda 30: qué es lo de la foto, con Gemini y la búsqueda de Google.
+         Arranca solo con la primera foto de un producto nuevo; el botón lo
+         repite. Lo que trae es una PROPUESTA: se revisa, se corrige y recién
+         «Guardar producto» lo escribe. Nunca trae precio. -->
+    <button type="button" class="btn secundario" id="btnIdentificar" style="display:none;">
+      <span class="material-icons">auto_awesome</span> Buscar los datos de la foto
+    </button>
+    <div class="card" id="sugerencia" style="display:none;background:#f6f8fb;margin-top:10px;"></div>
+
     <button class="btn" id="btnGuardar">
       <span class="material-icons">save</span> Guardar producto
     </button>
@@ -130,6 +139,7 @@ textarea { width:100%; padding:10px; border:1px solid var(--c-borde); border-rad
 <script type="module">
 import {
   verificarAuth, renderNav, db, toast, subirFoto, fmtMoneda, fmtFecha, iniciarAyuda, mostrarFoto,
+  identificarFoto, escapar as esc,
   doc, setDoc, addDoc, updateDoc, deleteDoc, collection, getDocs,
   query, where, orderBy, serverTimestamp, getCountFromServer
 } from "./utils.js";
@@ -147,6 +157,7 @@ iniciarAyuda("Cómo funciona el inventario", `
 <li><strong>Precio unitario:</strong> el precio por unidad que ve el comprador. <strong>Precio de lote:</strong> opcional, precio especial por llevarse todo el stock; el comprador además puede proponer otro valor por el lote.</li>
 <li><strong>Estado:</strong> automático según stock — con cantidad 0 aparece como agotado y deja de ofrecerse. No hace falta tocarlo: al validar ventas el stock se descuenta solo.</li>
 <li><strong>Fotos:</strong> por cámara o galería; se comprimen solas antes de subir.</li>
+<li><strong>Buscar los datos de la foto:</strong> con la primera foto de un producto nuevo, Gemini mira qué es, busca en internet la ficha del modelo y propone nombre, descripción y categoría. Llena lo que está vacío; lo demás lo muestra abajo para que elijas. <strong>Revisalo siempre</strong>: puede equivocarse, y lo que no ve no lo inventa. Nunca pone precio.</li>
 </ul>
 <h3>Lista de productos</h3>
 <p>Tocá una tarjeta para expandirla: <strong>Editar</strong> (modifica el producto), <strong>Historial</strong> (quién lo compró, cuándo y a qué precio) y <strong>Eliminar</strong> (definitivo; si el producto se vendió alguna vez, conviene dejarlo en cantidad 0 en vez de borrarlo, para conservar la referencia).</p>
@@ -156,6 +167,7 @@ let cats = [];        // [{id, nombre, activa}]
 let productos = [];   // [{id, ...datos}]
 let fotos = [];       // urls del producto en edición
 let editandoId = null;
+let archivoParaIdentificar = null;  // la primera foto elegida, para Gemini
 let ventasCache = null; // se carga la primera vez que se pide un historial
 
 // Los productos viejos solo tienen `descripcion`; se usa como nombre.
@@ -280,6 +292,10 @@ document.getElementById("btnGaleria").addEventListener("click", () => {
 async function procesarFotos(e) {
   const files = Array.from(e.target.files || []);
   if (files.length === 0) return;
+  // Con la PRIMERA foto de un producto que todavía no tiene nombre, Gemini
+  // arranca solo; si ya hay nombre, queda el botón para pedirlo.
+  const buscarSolo = fotos.length === 0 && !document.getElementById("pNombre").value.trim();
+  if (!archivoParaIdentificar) archivoParaIdentificar = files[0];
   const estado = document.getElementById("estadoFotos");
   estado.style.display = "block";
   for (let i = 0; i < files.length; i++) {
@@ -295,12 +311,94 @@ async function procesarFotos(e) {
   }
   estado.style.display = "none";
   e.target.value = "";
+  if (buscarSolo && fotos.length) identificar(true);
 }
+
+// ================= Qué es lo de la foto (Gemini) =================
+let ultimaPropuesta = null;
+async function fotoParaIdentificar() {
+  if (archivoParaIdentificar) return archivoParaIdentificar;
+  if (!fotos.length) return null;
+  // Producto que ya estaba guardado: se trae su primera foto de Cloudinary.
+  try { const b = await (await fetch(fotos[0])).blob(); return new File([b], "foto.jpg", { type: b.type || "image/jpeg" }); }
+  catch (e) { return null; }
+}
+async function identificar(automatico = false) {
+  const btn = document.getElementById("btnIdentificar");
+  const caja = document.getElementById("sugerencia");
+  const archivo = await fotoParaIdentificar();
+  if (!archivo) { toast("Primero cargá una foto.", "error"); return; }
+  btn.disabled = true;
+  caja.style.display = "block";
+  caja.innerHTML = `<p class="texto-suave">✨ Mirando la foto y buscando la ficha en internet… puede tardar unos segundos.</p>`;
+  const categorias = cats.filter((c) => c.activa !== false).map((c) => c.nombre);
+  const r = await identificarFoto(archivo, { categorias, pista: document.getElementById("pNombre").value.trim() });
+  btn.disabled = false;
+  if (!r.ok) {
+    caja.innerHTML = `<p class="texto-suave">✨ ${esc(r.motivo || "No se pudo buscar.")}</p>`;
+    if (r.sinConfigurar && automatico) caja.style.display = "none";
+    return;
+  }
+  ultimaPropuesta = r;
+  // Lo vacío se llena solo; lo que ya estaba escrito, no se pisa.
+  const llenados = aplicarPropuesta(r.producto, { soloVacios: true, categoria: automatico });
+  pintarPropuesta(r, llenados);
+}
+function descripcionDe(p) {
+  const partes = [];
+  if (p.descripcion) partes.push(p.descripcion);
+  const mm = [p.marca && "Marca: " + p.marca, p.modelo && "Modelo: " + p.modelo].filter(Boolean).join(" · ");
+  if (mm) partes.push(mm);
+  if (p.especificaciones.length) partes.push(p.especificaciones.map((e) => `${e.dato}: ${e.valor}`).join("\n"));
+  if (p.estadoVisible) partes.push("Estado a la vista: " + p.estadoVisible);
+  return partes.join("\n").slice(0, 1500);
+}
+function aplicarPropuesta(p, { soloVacios = false, categoria = false } = {}) {
+  const llenados = [];
+  const campo = (id, valor, nombre) => {
+    const el = document.getElementById(id);
+    if (!valor || (soloVacios && el.value.trim())) return;
+    el.value = valor; llenados.push(nombre);
+  };
+  campo("pNombre", p.nombre, "nombre");
+  campo("pDescripcion", descripcionDe(p), "descripción");
+  if (p.categoria && (categoria || !soloVacios)) {
+    const c = cats.find((x) => x.nombre.toLowerCase() === p.categoria.toLowerCase() && x.activa !== false);
+    if (c) { document.getElementById("pCategoria").value = c.id; llenados.push("categoría"); }
+  }
+  return llenados;
+}
+function pintarPropuesta(r, llenados) {
+  const p = r.producto;
+  const caja = document.getElementById("sugerencia");
+  caja.innerHTML = `
+    <p style="margin:0 0 6px;"><strong>✨ Lo que encontró Gemini</strong>
+      <span class="texto-suave">· confianza ${esc(p.confianza)}</span></p>
+    ${llenados.length ? `<p class="texto-suave" style="margin:0 0 6px;">Completé ${esc(llenados.join(", "))}. <strong>Revisalo antes de guardar.</strong></p>` : ""}
+    ${p.nombre ? `<p style="margin:2px 0;"><strong>${esc(p.nombre)}</strong></p>` : ""}
+    ${p.marca || p.modelo ? `<p class="texto-suave" style="margin:2px 0;">${esc([p.marca, p.modelo].filter(Boolean).join(" · "))}</p>` : ""}
+    ${p.descripcion ? `<p style="margin:4px 0;white-space:pre-wrap;">${esc(p.descripcion)}</p>` : ""}
+    ${p.especificaciones.length ? `<ul style="margin:4px 0;padding-left:18px;">${p.especificaciones.map((e) => `<li>${esc(e.dato)}: ${esc(e.valor)}</li>`).join("")}</ul>` : ""}
+    ${p.estadoVisible ? `<p class="texto-suave" style="margin:4px 0;">Estado a la vista: ${esc(p.estadoVisible)}</p>` : ""}
+    ${p.dudas.length ? `<p class="texto-suave" style="margin:4px 0;">⚠ Con dudas: ${esc(p.dudas.join(", "))}</p>` : ""}
+    ${r.fuentes.length ? `<p class="texto-suave" style="margin:6px 0 0;">Fuentes: ${r.fuentes.map((f) => `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo)}</a>`).join(" · ")}</p>` : `<p class="texto-suave" style="margin:6px 0 0;">Sin fuentes de internet: es sólo lo que se ve en la foto.</p>`}
+    <div class="fila" style="margin-top:8px;">
+      <button type="button" class="btn secundario" id="btnUsarTodo" style="margin-top:0;">Usar todo</button>
+      <button type="button" class="btn secundario" id="btnDescartarIA" style="margin-top:0;">Cerrar</button>
+    </div>`;
+  document.getElementById("btnUsarTodo").onclick = () => {
+    const l = aplicarPropuesta(p, { soloVacios: false });
+    toast(l.length ? "Listo: " + l.join(", ") + ". Revisalo antes de guardar." : "No había nada para usar.", "ok");
+  };
+  document.getElementById("btnDescartarIA").onclick = () => { caja.style.display = "none"; };
+}
+document.getElementById("btnIdentificar").addEventListener("click", () => identificar(false));
 
 document.getElementById("pFotoCamara").addEventListener("change", procesarFotos);
 document.getElementById("pFotosGaleria").addEventListener("change", procesarFotos);
 
 function renderThumbs() {
+  document.getElementById("btnIdentificar").style.display = fotos.length ? "" : "none";
   document.getElementById("thumbs").innerHTML = fotos.map((u, i) =>
     `<div class="thumb-wrap"><img class="thumb thumbVer" data-i="${i}" src="${u}">
      <div class="thumb-x" data-i="${i}">×</div></div>`
@@ -365,6 +463,8 @@ document.getElementById("btnGuardar").addEventListener("click", async () => {
 function limpiarForm() {
   editandoId = null;
   fotos = [];
+  archivoParaIdentificar = null; ultimaPropuesta = null;
+  document.getElementById("sugerencia").style.display = "none";
   renderThumbs();
   ["pNombre", "pDescripcion", "pUbicacion", "pPrecio", "pPrecioLote"].forEach((id) => document.getElementById(id).value = "");
   document.getElementById("pCantidad").value = "1";
