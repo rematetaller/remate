@@ -115,7 +115,7 @@ conversación**. Este vive en el repositorio y en el conocimiento del proyecto.
 | Marca | Fondo `#b45309` (--c-primario), trazo `#fef3e2` (--c-primario-claro). En la topbar, el ícono `gavel` de Material Icons |
 | Fotos | Cloudinary cloud **`r9u5oous`**, preset unsigned **`preset-remate`** ✅ creado y verificado, carpeta `remate/productos` |
 | Compresión de imágenes | JPEG 0.85 client-side · **productos: máx 800px** · otros usos: máx 2000px |
-| Funciones de servidor | **dos**, en **Vercel**: `api/tuya.mjs` (tanda 25), el puente a las luces del depósito, y `api/identificar.mjs` (tanda 30), la foto del inventario con Gemini. Existe porque Tuya exige firmar con un secreto, y un secreto no puede vivir en el navegador. El sitio NO se mudó: Vercel sirve sólo `/api/tuya`. Ver `LUCES.md`. Las notificaciones (EmailJS + CallMeBot) siguen pendientes y van por Netlify (§12) |
+| Funciones de servidor | **una sola**, desde la tanda 25: `api/tuya.mjs` en **Vercel**, el puente a las luces del depósito. La IA del inventario (tanda 30) no es propia: usa `claude-proxy`, la función de Netlify de Casa Verde. Existe porque Tuya exige firmar con un secreto, y un secreto no puede vivir en el navegador. El sitio NO se mudó: Vercel sirve sólo `/api/tuya`. Ver `LUCES.md`. Las notificaciones (EmailJS + CallMeBot) siguen pendientes y van por Netlify (§12) |
 | Domótica | **Tuya Cloud**, sólo desde `api/tuya.mjs`. Las luces del depósito ya estaban conectadas a un dispositivo Tuya; lo que se agregó es el camino desde el teléfono |
 | Variables de entorno | **cinco, desde la tanda 25**, todas en Vercel: `TUYA_CLIENT_ID`, `TUYA_CLIENT_SECRET`, `TUYA_REGION`, `TUYA_LUCES`, `ORIGENES_PERMITIDOS`. Los nombres están en `/.env.example`; los valores los carga Mauro a mano y **nunca** entran al repositorio |
 | Dispositivos | Mobile-first, teléfono Android/iPhone. El escritorio es el caso raro |
@@ -146,10 +146,9 @@ abre ninguna puerta; "protegerla" sí rompería la pantalla.
 /LUCES.md                    → el puente a Tuya: por qué existe, cómo se pone en marcha
 /.env.example                → los NOMBRES de las variables de entorno. Nunca valores
 /vercel.json                 → sólo /api sale por Vercel; el resto redirige al sitio real
-/api/_sesion.mjs             → lo común a las dos funciones: verificar el token de
+/api/_sesion.mjs             → la sesión de las funciones: verificar el token de
                                Firebase, leer la ficha con ESE token, CORS. No es ruta
-/api/tuya.mjs                → las luces: firma contra Tuya
-/api/identificar.mjs         → la foto del inventario: Gemini + búsqueda de Google
+/api/tuya.mjs                → LA ÚNICA FUNCIÓN DE SERVIDOR: las luces, firma contra Tuya
 /pruebas/luces.mjs           → banco de pruebas del puente. `node pruebas/luces.mjs`
 /pruebas/identificar.mjs     → banco de la foto. `node pruebas/identificar.mjs`
 /interno/                    → el panel de los dos administradores
@@ -571,12 +570,12 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | `index.html` | 1.0 | Puerta pública: valida la llave (por link o a mano) y avisa por WhatsApp si no sirve |
 | `firestore.rules` | **1.0** | Copia de las reglas de la consola: default deny sin catch-all, `usuarios` cerrado, `activo` exigido, permisos aplicados en el servidor, venta inmutable, bloque de `documentos`, —desde la tanda 25— `lucesRegistro`, el agente (v0.8), `reportes` (v0.9) y —desde la tanda 29— `avisos_contacto`. **Creado el 2026-09-07** copiando el texto real de la consola |
 | `LUCES.md` | 1.0 | El puente a Tuya: por qué hay un servidor en un proyecto estático, quién puede encender, la puesta en marcha en cuatro pasos y qué mirar cuando no anda |
-| `.env.example` | 1.1 | Los **nombres** de las siete variables de entorno de Vercel (cinco de Tuya y orígenes, dos de Gemini). Nunca valores |
-| `vercel.json` | 1.1 | Que de Vercel salga **sólo** `/api` —y que la foto tenga 30 s, porque Gemini buscando tarda—: cualquier otra dirección redirige a GitHub Pages, que es el sitio de verdad |
-| `api/_sesion.mjs` | 1.0 | Lo común a las dos funciones (tanda 30): verificar la firma RS256 del token, leer `usuarios/{uid}` con ese token, CORS con lista blanca. El `_` hace que Vercel no lo publique como ruta |
-| `api/identificar.mjs` | 1.0 | La foto del inventario (tanda 30): exige `inventario` o admin, le pregunta a Gemini con la búsqueda de Google qué es y cómo se describe, y devuelve una **propuesta** sin precios, con sus fuentes. No escribe en la base |
-| `pruebas/identificar.mjs` | 1.0 | Banco de la foto: 14 casos, sin npm ni red. Prueba sobre todo lo que NO hace |
-| `api/tuya.mjs` | 1.1 | Las luces. Verifica la firma RS256 del token de Firebase, lee `usuarios/{uid}` **con ese mismo token** (sin credencial de servidor), y recién ahí firma contra Tuya. Lista blanca de luces y de orígenes, freno por aparato |
+| `.env.example` | 1.0 | Los **nombres** de las cinco variables de entorno de Vercel. Nunca valores |
+| `vercel.json` | 1.0 | Que de Vercel salga **sólo** `/api`: cualquier otra dirección redirige a GitHub Pages, que es el sitio de verdad |
+| `api/_sesion.mjs` | 1.0 | La sesión de las funciones (tanda 30): verificar la firma RS256 del token, leer `usuarios/{uid}` con ese token, CORS con lista blanca. Salió de `tuya.mjs`. El `_` hace que Vercel no lo publique como ruta |
+| `interno/identificar.js` | 1.1 | La foto del inventario (tanda 30): arma el pedido a `claude-proxy` de Casa Verde con la búsqueda de Google, y lee lo que vuelve con desconfianza. **No importa nada**, así lo corre el banco. `utils.js` lo carga diferido |
+| `pruebas/identificar.mjs` | 1.1 | Banco de la foto: 12 casos, sin npm ni red. Prueba sobre todo lo que NO hace |
+| `api/tuya.mjs` | 1.1 | La única función de servidor. Verifica la firma RS256 del token de Firebase, lee `usuarios/{uid}` **con ese mismo token** (sin credencial de servidor), y recién ahí firma contra Tuya. Lista blanca de luces y de orígenes, freno por aparato |
 | `pruebas/luces.mjs` | 1.0 | Banco de pruebas del puente: 24 casos con la nube de Tuya, Firestore y las claves de Google simuladas. Firma tokens de verdad con un par de claves propio, así que la verificación que prueba es la real. `node pruebas/luces.mjs`, sin npm |
 | `comprador.html` | 2.3 | Catálogo (nombre + descripción, fotos ampliables), guía "¿Cómo comprar?", carrito, lote, propuesta, envío |
 | `interno/utils.js` | **1.18** | Núcleo: Firebase (SDK diferido), auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app / reportar / mis avisos por WhatsApp**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, teléfonos, **`PUENTE_LUCES` + `lucesEstado()` / `lucesMandar()`**, **`identificarFoto()`**, helpers |
@@ -1109,39 +1108,40 @@ el sistema por andando.
 
 ## v0.5.22 — Qué es lo de la foto: Gemini en el inventario (Tanda 30 · 30-sep-2026)
 
-> **Entrega:** `api/identificar.mjs` **1.0** y `api/_sesion.mjs` **1.0** (nuevos),
-> `api/tuya.mjs` 1.1 (usa `_sesion.mjs`; mismo comportamiento, 24/24),
-> `interno/utils.js` **v1.18**, `interno/inventario.html`, `vercel.json`,
-> `.env.example`, `pruebas/identificar.mjs` (14 casos).
+> **Entrega:** `interno/identificar.js` **1.1** (nuevo), `interno/utils.js` **v1.18**,
+> `interno/inventario.html`, `api/_sesion.mjs` 1.0 (nuevo) y `api/tuya.mjs` 1.1 (lo usa;
+> mismo comportamiento, 24/24), `pruebas/identificar.mjs` (12 casos). Y en Casa Verde,
+> `claude-proxy` **v6**.
 
 **Qué pidió Mauro:** que al cargar la foto de un artículo, además de reducirla para
 Cloudinary, Gemini busque en internet el detalle y la descripción de ese componente y
 lo traiga al formulario, para revisarlo y corregirlo antes de guardar.
 
-**Lo que había que saber primero:** Gemini **no estaba integrado** en el sitio. Las
-libretas se leen a mano (la foto al chat de Gemini con `prompt-libretas.md`, el JSON
-pegado en `documentos.html`). Y la clave de la API de Gemini es un secreto: no puede ir
-en el navegador. Así que esto es una **segunda función de Vercel**, igual que las luces.
+**Cómo se hizo, y la corrección del medio.** La primera versión armó una función propia
+en Vercel (`api/identificar.mjs`) con su propia clave de Gemini, porque en remate no
+había IA integrada: las libretas se leen a mano. Mauro avisó que **la IA ya estaba
+puesta en Casa Verde**, para las facturas —y Tiempos ya la usa para las boletas—. Se
+volvió a eso el mismo día: una sola clave, en un solo lugar, y ningún proyecto de
+Vercel que crear. La verificación de la sesión que salió de `tuya.mjs` para esa versión
+quedó en `_sesion.mjs`, porque no rompe nada y ordena las luces.
 
-**Qué se hizo:**
-
-- **`api/identificar.mjs`.** Recibe la foto ya reducida (800 px) y el token de sesión;
-  verifica el token y la ficha **con ese mismo token**, exige el permiso `inventario`
-  (o admin), y le pregunta a Gemini con `google_search` encendido. Devuelve nombre,
-  tipo, marca, modelo, descripción, especificaciones, una categoría **sólo si existe**,
-  lo que se ve del estado, la confianza, las dudas y las páginas de donde lo sacó.
-  **Nunca un precio.** Un pedido cada 4 s por persona.
-- **`api/_sesion.mjs`.** La verificación de la sesión salió de `tuya.mjs` para que las
-  dos funciones usen la misma. Las luces no cambiaron: su banco sigue 24/24.
+- **`interno/identificar.js`** manda la foto reducida (800 px) a `claude-proxy` con
+  `buscar: true`, y lee lo que vuelve: nombre, tipo, marca, modelo, descripción,
+  especificaciones, una categoría **sólo si existe**, lo que se ve del estado, la
+  confianza, las dudas y las páginas de donde lo sacó. **Nunca un precio.**
+- **El modelo es `gemini-2.5-flash-lite`.** La primera prueba real con
+  `gemini-2.5-flash` devolvió un JSON cortado: ése piensa antes de contestar y el
+  pensamiento se come `max_tokens`.
+- **`claude-proxy` v6 (Casa Verde)** enciende la búsqueda de Google sólo si se la
+  piden y devuelve las `fuentes`; quien no la pide recibe lo mismo que en la v5. Hasta
+  que Mauro suba el zip, remate funciona igual **sin búsqueda**, y el formulario lo dice.
 - **En el formulario:** al subir la primera foto de un artículo sin nombre, la
   búsqueda arranca sola; también hay un botón «✨ Buscar qué es». **Sólo llena los
-  campos vacíos** —nunca pisa lo que la persona escribió— salvo que toque «Usar todo»,
-  y muestra las fuentes. Nada se guarda hasta que la persona guarda.
+  campos vacíos** —nunca pisa lo que la persona escribió— salvo que toque «Usar todo».
+  Nada se guarda hasta que la persona guarda.
 
-**Qué falta, y es de Mauro:** crear el proyecto en Vercel importando este repositorio,
-cargar `GEMINI_API_KEY` (Google AI Studio) en sus variables de entorno, y pasar la
-dirección para poner `PUENTE_LUCES` —la de la foto sale de ésa—. Hasta entonces el
-botón dice que falta configurar y el inventario se carga a mano como siempre.
+**Lo que cuesta, a la vista:** `claude-proxy` está abierta —sin sesión y con CORS `*`—
+desde antes de esta tanda. Remate no la abrió más, pero ahora la usa un tercer sitio.
 
 **Lo que abre para después:** la misma función puede leer las libretas y dejar de
 copiar y pegar el JSON a mano. No se hizo en esta tanda: son datos de terceros y

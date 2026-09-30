@@ -1,17 +1,17 @@
 // =====================================================
-// pruebas/identificar.mjs — Banco de la función que identifica la foto
+// pruebas/identificar.mjs — Banco de «qué es lo de la foto»
 //
 //   node pruebas/identificar.mjs
 //
-// Sin npm, sin red. Corre `api/identificar.mjs` de verdad con Gemini,
-// Firestore y las claves de Google simulados, y tokens firmados acá con un
-// par de claves propio. Prueba sobre todo lo que NO hace: atender a quien no
-// tiene inventario, a un origen ajeno, sin clave, o creerle a una respuesta
-// rota del modelo.
+// Sin npm, sin red. Corre `interno/identificar.js` de verdad con la función
+// de Casa Verde simulada. Prueba sobre todo lo que NO hace: poner precios,
+// inventar una categoría, creerle a una respuesta rota o a un enlace raro, y
+// romperse cuando la función de Casa Verde todavía no sabe buscar.
 // =====================================================
 
 import assert from "node:assert/strict";
-import crypto from "node:crypto";
+import { armarPrompt, leerRespuesta, limpiarFuentes, pedirIdentificacion, FUNCION_IA, MODELO }
+  from "../interno/identificar.js";
 
 let pasadas = 0, fallidas = 0;
 async function prueba(nombre, fn) {
@@ -20,86 +20,46 @@ async function prueba(nombre, fn) {
 }
 const titulo = (t) => console.log(`\n${t}`);
 
-const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
-const PEM = publicKey.export({ type: "spki", format: "pem" });
-const KID = "clave-de-prueba", PROYECTO = "remate-acbc9", ORIGEN = "https://rematetaller.github.io";
-const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
-function token(cuerpo = {}) {
-  const ahora = Math.floor(Date.now() / 1000);
-  const p = { aud: PROYECTO, iss: `https://securetoken.google.com/${PROYECTO}`, sub: "uid-" + Math.random(), iat: ahora - 30, exp: ahora + 3600, ...cuerpo };
-  const c = b64({ alg: "RS256", kid: KID, typ: "JWT" }), q = b64(p);
-  return `${c}.${q}.${crypto.createSign("RSA-SHA256").update(`${c}.${q}`).sign(privateKey).toString("base64url")}`;
-}
-
-process.env.ORIGENES_PERMITIDOS = ORIGEN;
-process.env.GEMINI_API_KEY = "clave-de-prueba";
-let ficha = { activo: true, rol: "", permisos: { inventario: true } };
-let gemini = { ok: true, status: 200, cuerpo: null };
-let pedidoAGemini = null;
-globalThis.fetch = async (url, op = {}) => {
-  const u = String(url);
-  if (u.includes("googleapis.com/robot")) return { ok: true, headers: { get: () => "max-age=3600" }, json: async () => ({ [KID]: PEM }) };
-  if (u.includes("firestore.googleapis.com")) return { ok: true, status: 200, json: async () => ({ fields: {
-    activo: { booleanValue: ficha.activo }, rol: { stringValue: ficha.rol }, nombre: { stringValue: "Alguien" },
-    permisos: { mapValue: { fields: Object.fromEntries(Object.entries(ficha.permisos).map(([k, v]) => [k, { booleanValue: v }])) } } } }) };
-  if (u.includes("generativelanguage.googleapis.com")) { pedidoAGemini = { url: u, op, cuerpo: JSON.parse(op.body) }; return { ok: gemini.ok, status: gemini.status, json: async () => gemini.cuerpo }; }
-  throw new Error("pedido inesperado: " + u);
-};
-const respuestaGemini = (texto, chunks = []) => ({ candidates: [{ content: { parts: [{ text: texto }] }, groundingMetadata: { groundingChunks: chunks } }] });
 const BUENA = JSON.stringify({ nombre: "Taladro percutor Bosch GSB 13 RE", tipo: "taladro percutor", marca: "Bosch", modelo: "GSB 13 RE",
   descripcion: "Taladro percutor de 650 W.", especificaciones: [{ dato: "Potencia", valor: "650 W" }, { dato: "", valor: "x" }],
   categoria: "herramientas eléctricas", estadoVisible: null, confianza: "alta", dudas: [], precio: 1000 });
+const CATS = ["Herramientas eléctricas", "Repuestos"];
 
-const mod = await import("../api/identificar.mjs");
-const { default: manejador, leerRespuesta, fuentesDe, autorizar, armarPrompt } = mod;
-function pedido({ metodo = "POST", tok = token(), origen = ORIGEN, cuerpo = { imagen: "QUJD", mime: "image/jpeg", categorias: ["Herramientas eléctricas", "Repuestos"] } } = {}) {
-  const res = { codigo: null, cuerpo: null, cabeceras: {}, setHeader(k, v) { this.cabeceras[k] = v; },
-    status(c) { this.codigo = c; return this; }, json(o) { this.cuerpo = o; return this; }, end() { return this; } };
-  const headers = {}; if (origen) headers.origin = origen; if (tok) headers.authorization = "Bearer " + tok;
-  return { req: { method: metodo, headers, body: cuerpo }, res };
-}
-const correr = async (o) => { const p = pedido(o); await manejador(p.req, p.res); return p.res; };
+let ultimo = null;
+const simular = (estado, cuerpo) => async (url, op) => {
+  ultimo = { url, op, cuerpo: JSON.parse(op.body) };
+  return { ok: estado < 400, status: estado, json: async () => cuerpo };
+};
+const pedir = (cuerpoRespuesta, estado = 200, datos = {}) =>
+  pedirIdentificacion({ imagen: "QUJD", mime: "image/jpeg", categorias: CATS, ...datos }, { fetch: simular(estado, cuerpoRespuesta) });
 
-titulo("Quién puede pedirlo");
-await prueba("un origen ajeno no pasa", async () => { assert.equal((await correr({ origen: "https://otro.com" })).codigo, 403); });
-await prueba("sin sesión no pasa", async () => { assert.equal((await correr({ tok: null })).codigo, 401); });
-await prueba("un token de otro proyecto no pasa", async () => { assert.equal((await correr({ tok: token({ aud: "otro" }) })).codigo, 401); });
-await prueba("sin el permiso de inventario no pasa; con él o siendo admin, sí", async () => {
-  assert.equal(autorizar({ activo: true, rol: "", permisos: { luces: true } }), "tu cuenta no tiene habilitado el inventario");
-  assert.equal(autorizar({ activo: false, rol: "admin", permisos: {} }), "tu cuenta está desactivada");
-  assert.equal(autorizar({ activo: true, rol: "admin", permisos: {} }), null);
-  ficha = { activo: true, rol: "", permisos: { luces: true } };
-  assert.equal((await correr()).codigo, 403);
-  ficha = { activo: true, rol: "", permisos: { inventario: true } };
+titulo("Lo que se le manda a la función de Casa Verde");
+await prueba("va a claude-proxy, con la foto, el prompt y la búsqueda pedida", async () => {
+  await pedir({ content: [{ type: "text", text: BUENA }] });
+  assert.equal(ultimo.url, FUNCION_IA);
+  assert.ok(/serene-scone-76bd4e\.netlify\.app\/\.netlify\/functions\/claude-proxy$/.test(ultimo.url));
+  assert.equal(ultimo.cuerpo.model, MODELO);
+  assert.notEqual(MODELO, "gemini-2.5-flash", "el que piensa corta el JSON");
+  assert.ok(ultimo.cuerpo.max_tokens >= 4000);
+  assert.equal(ultimo.cuerpo.buscar, true);
+  const partes = ultimo.cuerpo.messages[0].content;
+  assert.equal(partes[0].type, "image"); assert.equal(partes[0].source.media_type, "image/jpeg");
+  assert.ok(/NO pongas precios/.test(partes[1].text));
 });
-
-titulo("Lo que se le manda a Gemini");
-await prueba("sin la clave en Vercel lo dice, en vez de fallar raro", async () => {
-  delete process.env.GEMINI_API_KEY;
-  const r = await correr();
-  assert.equal(r.codigo, 503); assert.ok(/GEMINI_API_KEY/.test(r.cuerpo.motivo));
-  process.env.GEMINI_API_KEY = "clave-de-prueba";
+await prueba("no manda credenciales: la clave vive en Netlify", async () => {
+  await pedir({ content: [{ type: "text", text: BUENA }] });
+  assert.deepEqual(Object.keys(ultimo.op.headers), ["Content-Type"]);
+  assert.ok(!/key|clave|token|Bearer/i.test(JSON.stringify(ultimo.op.headers)));
 });
-await prueba("una foto que no es imagen, o demasiado grande, se rechaza antes de gastar", async () => {
-  pedidoAGemini = null;
-  assert.equal((await correr({ cuerpo: { imagen: "QUJD", mime: "application/pdf" } })).codigo, 400);
-  assert.equal((await correr({ cuerpo: { imagen: "A".repeat(2_600_000), mime: "image/jpeg" } })).codigo, 413);
-  assert.equal((await correr({ cuerpo: { imagen: "<script>", mime: "image/jpeg" } })).codigo, 400);
-  assert.equal(pedidoAGemini, null);
+await prueba("una foto ilegible no gasta un pedido", async () => {
+  ultimo = null;
+  const r = await pedirIdentificacion({ imagen: "<script>" }, { fetch: simular(200, {}) });
+  assert.equal(r.ok, false); assert.equal(ultimo, null);
+  assert.equal((await pedirIdentificacion({ imagen: "" }, { fetch: simular(200, {}) })).ok, false);
 });
-await prueba("va con la búsqueda de Google, la clave en la cabecera y nunca en la dirección", async () => {
-  gemini = { ok: true, status: 200, cuerpo: respuestaGemini(BUENA) };
-  const r = await correr();
-  assert.equal(r.codigo, 200);
-  assert.deepEqual(pedidoAGemini.cuerpo.tools, [{ google_search: {} }]);
-  assert.equal(pedidoAGemini.op.headers["x-goog-api-key"], "clave-de-prueba");
-  assert.ok(!pedidoAGemini.url.includes("clave-de-prueba"), "la clave no va en la URL");
-  assert.equal(pedidoAGemini.cuerpo.contents[0].parts[1].inline_data.mime_type, "image/jpeg");
-});
-await prueba("la misma persona no puede disparar pedidos seguidos", async () => {
-  const t = token({ sub: "uid-fijo" });
-  assert.equal((await correr({ tok: t })).codigo, 200);
-  assert.equal((await correr({ tok: t })).codigo, 429);
+await prueba("un tipo de imagen raro se manda como jpeg", async () => {
+  await pedir({ content: [{ type: "text", text: BUENA }] }, 200, { mime: "image/heic" });
+  assert.equal(ultimo.cuerpo.messages[0].content[0].source.media_type, "image/jpeg");
 });
 await prueba("el prompt pide no inventar, no poner precios, y trae las categorías y la pista", () => {
   const p = armarPrompt({ categorias: ["Repuestos"], pista: "motor de portón" });
@@ -108,16 +68,19 @@ await prueba("el prompt pide no inventar, no poner precios, y trae las categorí
 
 titulo("Lo que vuelve");
 await prueba("una respuesta buena llega limpia, sin precio, con la categoría que existe", async () => {
-  gemini = { ok: true, status: 200, cuerpo: respuestaGemini("```json\n" + BUENA + "\n```", [
-    { web: { uri: "https://www.bosch.com/gsb13", title: "Bosch" } }, { web: { uri: "https://www.bosch.com/gsb13", title: "Bosch" } },
-    { web: { uri: "javascript:alert(1)", title: "x" } }]) };
-  const r = await correr();
-  assert.equal(r.cuerpo.ok, true);
-  const p = r.cuerpo.producto;
-  assert.equal(p.marca, "Bosch"); assert.equal(p.categoria, "Herramientas eléctricas");
-  assert.equal(p.especificaciones.length, 1, "la especificación sin nombre se descarta");
-  assert.ok(!("precio" in p));
-  assert.deepEqual(r.cuerpo.fuentes, [{ titulo: "Bosch", url: "https://www.bosch.com/gsb13" }]);
+  const r = await pedir({ content: [{ type: "text", text: "```json\n" + BUENA.slice(0, 40) }, { type: "text", text: BUENA.slice(40) + "\n```" }],
+    fuentes: [{ titulo: "Bosch", url: "https://www.bosch.com/gsb13" }, { titulo: "Bosch", url: "https://www.bosch.com/gsb13" },
+      { titulo: "x", url: "javascript:alert(1)" }] });
+  assert.equal(r.ok, true);
+  assert.equal(r.producto.marca, "Bosch"); assert.equal(r.producto.categoria, "Herramientas eléctricas");
+  assert.equal(r.producto.especificaciones.length, 1, "la especificación sin nombre se descarta");
+  assert.ok(!("precio" in r.producto));
+  assert.deepEqual(r.fuentes, [{ titulo: "Bosch", url: "https://www.bosch.com/gsb13" }]);
+  assert.equal(r.buscoEnInternet, true);
+});
+await prueba("si la función todavía no sabe buscar, anda igual y lo dice", async () => {
+  const r = await pedir({ content: [{ type: "text", text: BUENA }] });
+  assert.equal(r.ok, true); assert.deepEqual(r.fuentes, []); assert.equal(r.buscoEnInternet, false);
 });
 await prueba("una categoría inventada por el modelo no se usa", () => {
   assert.equal(leerRespuesta(JSON.stringify({ categoria: "Cosas" }), ["Repuestos"]).categoria, null);
@@ -129,18 +92,26 @@ await prueba("texto antes del JSON se tolera; basura, no", () => {
   assert.equal(leerRespuesta('{"nombre":"null","marca":"  "}').nombre, null);
   assert.equal(leerRespuesta('{"confianza":"total"}').confianza, "baja");
 });
-await prueba("si Gemini falla o contesta basura, se dice y no se inventa nada", async () => {
-  gemini = { ok: false, status: 429, cuerpo: { error: { message: "cuota agotada" } } };
-  let r = await correr();
-  assert.equal(r.codigo, 502); assert.ok(/cuota agotada/.test(r.cuerpo.motivo));
-  gemini = { ok: true, status: 200, cuerpo: respuestaGemini("perdón, no puedo") };
-  r = await correr();
-  assert.equal(r.codigo, 502); assert.ok(/a mano/.test(r.cuerpo.motivo));
+await prueba("si la IA falla o contesta basura, se dice y no se inventa nada", async () => {
+  let r = await pedir({ error: "Límite de uso de Gemini alcanzado." }, 429);
+  assert.equal(r.ok, false); assert.ok(/Límite de uso/.test(r.motivo) && /a mano/.test(r.motivo));
+  r = await pedir({ content: [{ type: "text", text: "perdón, no puedo" }] });
+  assert.equal(r.ok, false); assert.ok(/a mano/.test(r.motivo));
+  r = await pedir({});
+  assert.equal(r.ok, false);
+  r = await pedir({ content: [{ type: "text", text: '{"nombre":"Tala' }], warning: "Respuesta truncada" });
+  assert.equal(r.ok, false); assert.ok(/cortada/.test(r.motivo));
+});
+await prueba("sin red, o si tarda, se dice en vez de quedarse girando", async () => {
+  let r = await pedirIdentificacion({ imagen: "QUJD" }, { fetch: async () => { throw new TypeError("fetch failed"); } });
+  assert.equal(r.ok, false); assert.ok(/internet/.test(r.motivo));
+  r = await pedirIdentificacion({ imagen: "QUJD" }, { esperaMs: 20, fetch: (u, op) => new Promise((_, no) =>
+    op.signal.addEventListener("abort", () => no(Object.assign(new Error("abortado"), { name: "AbortError" })))) });
+  assert.equal(r.ok, false); assert.ok(/tardó/.test(r.motivo));
 });
 await prueba("las fuentes son sólo https y sin repetir", () => {
-  assert.deepEqual(fuentesDe({ groundingMetadata: { groundingChunks: [{ web: { uri: "http://x.com" } }, { web: { uri: "https://a.com", title: "A" } }] } }),
-    [{ titulo: "A", url: "https://a.com" }]);
-  assert.deepEqual(fuentesDe({}), []);
+  assert.deepEqual(limpiarFuentes([{ url: "http://x.com" }, { url: "https://a.com", titulo: "A" }, null]), [{ titulo: "A", url: "https://a.com" }]);
+  assert.deepEqual(limpiarFuentes(undefined), []);
 });
 
 console.log(`\n  ${pasadas} pasadas, ${fallidas} fallidas\n`);

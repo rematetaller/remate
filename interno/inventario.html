@@ -110,7 +110,7 @@ textarea { width:100%; padding:10px; border:1px solid var(--c-borde); border-rad
     <div class="thumbs" id="thumbs"></div>
     <p class="texto-suave" id="estadoFotos" style="display:none;"></p>
 
-    <!-- Tanda 30: qué es lo de la foto, con Gemini y la búsqueda de Google.
+    <!-- Tanda 30: qué es lo de la foto, con Gemini (la función de Casa Verde) y la búsqueda de Google.
          Arranca solo con la primera foto de un producto nuevo; el botón lo
          repite. Lo que trae es una PROPUESTA: se revisa, se corrige y recién
          «Guardar producto» lo escribe. Nunca trae precio. -->
@@ -336,7 +336,6 @@ async function identificar(automatico = false) {
   btn.disabled = false;
   if (!r.ok) {
     caja.innerHTML = `<p class="texto-suave">✨ ${esc(r.motivo || "No se pudo buscar.")}</p>`;
-    if (r.sinConfigurar && automatico) caja.style.display = "none";
     return;
   }
   ultimaPropuesta = r;
@@ -381,7 +380,7 @@ function pintarPropuesta(r, llenados) {
     ${p.especificaciones.length ? `<ul style="margin:4px 0;padding-left:18px;">${p.especificaciones.map((e) => `<li>${esc(e.dato)}: ${esc(e.valor)}</li>`).join("")}</ul>` : ""}
     ${p.estadoVisible ? `<p class="texto-suave" style="margin:4px 0;">Estado a la vista: ${esc(p.estadoVisible)}</p>` : ""}
     ${p.dudas.length ? `<p class="texto-suave" style="margin:4px 0;">⚠ Con dudas: ${esc(p.dudas.join(", "))}</p>` : ""}
-    ${r.fuentes.length ? `<p class="texto-suave" style="margin:6px 0 0;">Fuentes: ${r.fuentes.map((f) => `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo)}</a>`).join(" · ")}</p>` : `<p class="texto-suave" style="margin:6px 0 0;">Sin fuentes de internet: es sólo lo que se ve en la foto.</p>`}
+    ${r.fuentes.length ? `<p class="texto-suave" style="margin:6px 0 0;">Fuentes: ${r.fuentes.map((f) => `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.titulo)}</a>`).join(" · ")}</p>` : `<p class="texto-suave" style="margin:6px 0 0;">${r.buscoEnInternet ? "No encontró páginas con la ficha: es lo que se ve en la foto." : "Sin búsqueda en internet todavía: es lo que Gemini reconoce de la foto, sin páginas que lo respalden."}</p>`}
     <div class="fila" style="margin-top:8px;">
       <button type="button" class="btn secundario" id="btnUsarTodo" style="margin-top:0;">Usar todo</button>
       <button type="button" class="btn secundario" id="btnDescartarIA" style="margin-top:0;">Cerrar</button>

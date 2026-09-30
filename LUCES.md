@@ -200,9 +200,7 @@ falsificado.
 
 ---
 
-**Desde la tanda 30 (30-sep-2026) el mismo proyecto de Vercel sirve una segunda
-función**, `api/identificar.mjs` (la foto del inventario con Gemini), y la
-verificación de la sesión vive en `api/_sesion.mjs`, compartida por las dos. Crear
-el proyecto de Vercel una vez alcanza para las dos: la dirección de la segunda sale
-de `PUENTE_LUCES`. Para las luces siguen haciendo falta las variables `TUYA_*`; para
-la foto, `GEMINI_API_KEY`.
+**Desde la tanda 30 (30-sep-2026)** la verificación de la sesión vive en
+`api/_sesion.mjs`, afuera de `tuya.mjs`: el mismo código, listo para una segunda
+función. La IA del inventario **no** es una función de este proyecto: usa la de
+Casa Verde (ver `CLAUDE.md`).
