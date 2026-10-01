@@ -115,9 +115,9 @@ conversación**. Este vive en el repositorio y en el conocimiento del proyecto.
 | Marca | Fondo `#b45309` (--c-primario), trazo `#fef3e2` (--c-primario-claro). En la topbar, el ícono `gavel` de Material Icons |
 | Fotos | Cloudinary cloud **`r9u5oous`**, preset unsigned **`preset-remate`** ✅ creado y verificado, carpeta `remate/productos` |
 | Compresión de imágenes | JPEG 0.85 client-side · **productos: máx 800px** · otros usos: máx 2000px |
-| Funciones de servidor | **una sola**, desde la tanda 25: `api/tuya.mjs` en **Vercel**, el puente a las luces del depósito. La IA del inventario (tanda 30) no es propia: usa `claude-proxy`, la función de Netlify de Casa Verde. Existe porque Tuya exige firmar con un secreto, y un secreto no puede vivir en el navegador. El sitio NO se mudó: Vercel sirve sólo `/api/tuya`. Ver `LUCES.md`. Las notificaciones (EmailJS + CallMeBot) siguen pendientes y van por Netlify (§12) |
+| Funciones de servidor | **una sola**, desde la tanda 25: `api/tuya.mjs`, el puente a las luces del depósito, **servido desde el Netlify de Casa Verde** desde la tanda 31 (se escribió para Vercel, que nunca se llegó a crear). La IA del inventario (tanda 30) no es propia: usa `claude-proxy`, la función de Netlify de Casa Verde. Existe porque Tuya exige firmar con un secreto, y un secreto no puede vivir en el navegador. El sitio NO se mudó: GitHub Pages sigue publicando todo. Ver `LUCES.md`. Las notificaciones (EmailJS + CallMeBot) siguen pendientes y van por Netlify (§12) |
 | Domótica | **Tuya Cloud**, sólo desde `api/tuya.mjs`. Las luces del depósito ya estaban conectadas a un dispositivo Tuya; lo que se agregó es el camino desde el teléfono |
-| Variables de entorno | **cinco, desde la tanda 25**, todas en Vercel: `TUYA_CLIENT_ID`, `TUYA_CLIENT_SECRET`, `TUYA_REGION`, `TUYA_LUCES`, `ORIGENES_PERMITIDOS`. Los nombres están en `/.env.example`; los valores los carga Mauro a mano y **nunca** entran al repositorio |
+| Variables de entorno | **cinco, desde la tanda 25**, todas en el Netlify de Casa Verde desde la tanda 31: `TUYA_CLIENT_ID`, `TUYA_CLIENT_SECRET`, `TUYA_REGION`, `TUYA_LUCES`, `ORIGENES_PERMITIDOS`. Los nombres están en `/.env.example`; los valores los carga Mauro a mano y **nunca** entran al repositorio |
 | Dispositivos | Mobile-first, teléfono Android/iPhone. El escritorio es el caso raro |
 | Idioma | Rioplatense, voseo — en la interfaz y en la documentación |
 
@@ -130,7 +130,7 @@ públicos por diseño: no son secretos, son identificadores. Lo que protege el s
 las reglas de Firestore (§5), que las aplica el servidor. **Nunca salen del lado
 servidor ni entran al repositorio:** el `api_secret` de Cloudinary, las contraseñas de
 los administradores (que además **no se comparten entre ellos**), el Access Secret de
-Tuya —que vive en las variables de entorno de Vercel— y las futuras claves de terceros.
+Tuya —que vive en las variables de entorno del Netlify de Casa Verde— y las futuras claves de terceros.
 
 **La dirección del puente de luces (`PUENTE_LUCES` en `utils.js`) sí puede estar en el
 código**, y conviene no confundirla con un secreto: la función no hace absolutamente
@@ -145,7 +145,7 @@ abre ninguna puerta; "protegerla" sí rompería la pantalla.
 /firestore.rules             → copia de las reglas publicadas en la consola
 /LUCES.md                    → el puente a Tuya: por qué existe, cómo se pone en marcha
 /.env.example                → los NOMBRES de las variables de entorno. Nunca valores
-/vercel.json                 → sólo /api sale por Vercel; el resto redirige al sitio real
+/netlify/functions/luces-remate.mjs → traduce el pedido de Netlify al req/res de api/tuya.mjs
 /api/_sesion.mjs             → la sesión de las funciones: verificar el token de
                                Firebase, leer la ficha con ESE token, CORS. No es ruta
 /api/tuya.mjs                → LA ÚNICA FUNCIÓN DE SERVIDOR: las luces, firma contra Tuya
@@ -570,15 +570,15 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | `index.html` | 1.0 | Puerta pública: valida la llave (por link o a mano) y avisa por WhatsApp si no sirve |
 | `firestore.rules` | **1.0** | Copia de las reglas de la consola: default deny sin catch-all, `usuarios` cerrado, `activo` exigido, permisos aplicados en el servidor, venta inmutable, bloque de `documentos`, —desde la tanda 25— `lucesRegistro`, el agente (v0.8), `reportes` (v0.9) y —desde la tanda 29— `avisos_contacto`. **Creado el 2026-09-07** copiando el texto real de la consola |
 | `LUCES.md` | 1.0 | El puente a Tuya: por qué hay un servidor en un proyecto estático, quién puede encender, la puesta en marcha en cuatro pasos y qué mirar cuando no anda |
-| `.env.example` | 1.0 | Los **nombres** de las cinco variables de entorno de Vercel. Nunca valores |
-| `vercel.json` | 1.0 | Que de Vercel salga **sólo** `/api`: cualquier otra dirección redirige a GitHub Pages, que es el sitio de verdad |
-| `api/_sesion.mjs` | 1.0 | La sesión de las funciones (tanda 30): verificar la firma RS256 del token, leer `usuarios/{uid}` con ese token, CORS con lista blanca. Salió de `tuya.mjs`. El `_` hace que Vercel no lo publique como ruta |
+| `.env.example` | 1.1 | Los **nombres** de las cinco variables de entorno del puente, que se cargan en el Netlify de Casa Verde. Nunca valores |
+| `netlify/functions/luces-remate.mjs` | 1.0 | El puente servido por Netlify (tanda 31): traduce `event` al `req`/`res` de `api/tuya.mjs` y la respuesta de vuelta. Sin lógica. **Viaja en el zip de Casa Verde** con `api/tuya.mjs` y `api/_sesion.mjs`, con las mismas rutas. `vercel.json` se retiró en la misma tanda |
+| `api/_sesion.mjs` | 1.0 | La sesión de las funciones (tanda 30): verificar la firma RS256 del token, leer `usuarios/{uid}` con ese token, CORS con lista blanca. Salió de `tuya.mjs`. Viaja en el zip de Netlify |
 | `interno/identificar.js` | 1.3 | La foto del inventario (tanda 30): arma el pedido a `claude-proxy` de Casa Verde con la búsqueda de Google, y lee lo que vuelve con desconfianza. **No importa nada**, así lo corre el banco. `utils.js` lo carga diferido |
 | `pruebas/identificar.mjs` | 1.2 | Banco de la foto: 13 casos, sin npm ni red. Prueba sobre todo lo que NO hace |
 | `api/tuya.mjs` | 1.1 | La única función de servidor. Verifica la firma RS256 del token de Firebase, lee `usuarios/{uid}` **con ese mismo token** (sin credencial de servidor), y recién ahí firma contra Tuya. Lista blanca de luces y de orígenes, freno por aparato |
-| `pruebas/luces.mjs` | 1.0 | Banco de pruebas del puente: 24 casos con la nube de Tuya, Firestore y las claves de Google simuladas. Firma tokens de verdad con un par de claves propio, así que la verificación que prueba es la real. `node pruebas/luces.mjs`, sin npm |
+| `pruebas/luces.mjs` | 1.1 | Banco de pruebas del puente: 28 casos (4 por el adaptador de Netlify) con la nube de Tuya, Firestore y las claves de Google simuladas. Firma tokens de verdad con un par de claves propio, así que la verificación que prueba es la real. `node pruebas/luces.mjs`, sin npm |
 | `comprador.html` | 2.3 | Catálogo (nombre + descripción, fotos ampliables), guía "¿Cómo comprar?", carrito, lote, propuesta, envío |
-| `interno/utils.js` | **1.18** | Núcleo: Firebase (SDK diferido), auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app / reportar / mis avisos por WhatsApp**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, teléfonos, **`PUENTE_LUCES` + `lucesEstado()` / `lucesMandar()`**, **`identificarFoto()`**, helpers |
+| `interno/utils.js` | **1.19** | Núcleo: Firebase (SDK diferido), auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app / reportar / mis avisos por WhatsApp**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, teléfonos, **`PUENTE_LUCES` + `lucesEstado()` / `lucesMandar()`**, **`identificarFoto()`**, helpers |
 | `interno/design-system.css` | **1.1** | Estilos mobile-first |
 | `interno/documentos.html` | — | Libretas de propiedad: alta, listado y consulta. Exige el permiso `documentos`. **Faltaba en este inventario** hasta el 2026-09-07 |
 | `interno/diagnostico.html` | **2.2** | Prueba las conexiones reales del panel y **que las reglas estén publicadas**. Sin ítem en la barra y **sin depender del núcleo**: se abre escribiendo la dirección y carga aunque `utils.js` esté roto |
@@ -1103,6 +1103,34 @@ el sistema por andando.
 >
 > **La lección, que vale más que las siete entradas:** un registro no se detiene con un
 > aviso. Se detiene en silencio, y lo que se rompe después no parece tener nada que ver.
+
+---
+
+## v0.5.23 — Las luces, desde Netlify (Tanda 31 · 1-oct-2026)
+
+> **Entrega:** `netlify/functions/luces-remate.mjs` **1.0** (nuevo), `interno/utils.js`
+> **v1.19** (`PUENTE_LUCES` apunta a Netlify), `interno/luces.html` (el aviso de
+> configuración nombra Netlify), `LUCES.md` § 3.2 reescrito, `.env.example`,
+> `pruebas/luces.mjs` (28 casos). **`vercel.json` se retiró.** `api/tuya.mjs` no cambió.
+
+**Qué pasó:** Mauro dejó las dos luces vinculadas al proyecto «depo» de Tuya (las dos
+`s180v3.1`, comando `switch_1`, centro de datos `us`) y fue a crear el proyecto de
+Vercel. Conectar la cuenta de GitHub `rematetaller` con la cuenta de Vercel volvió
+tres veces a «Install» sin terminar. «Hazlo, porque me sigue dando vueltas.»
+
+**Qué se decidió:** servir el puente desde el **Netlify de Casa Verde**
+(`serene-scone-76bd4e`), que ya es el servidor del ecosistema y que Mauro despliega con
+un zip. No hay GitHub que conectar, y las claves de servidor quedan en una sola consola.
+La función no se reescribió: un adaptador de veinte líneas traduce el pedido, y el banco
+lo prueba (preflight, sesión, lista, prender con cuerpo en texto y en base64) y además se
+armó con esbuild, como hace Netlify, antes de entregar.
+
+**Lo que hay que cuidar desde ahora:** el zip de Netlify lo arma Casa Verde y reemplaza
+todo el sitio. Tiene que llevar `netlify/functions/luces-remate.mjs`, `api/tuya.mjs` y
+`api/_sesion.mjs` de este repositorio, con esas rutas; lo dice `netlify.toml` de allá.
+
+**Qué falta, y es de Mauro:** cargar las cinco variables en Netlify, subir el zip y
+publicarlo.
 
 ---
 

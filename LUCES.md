@@ -7,10 +7,10 @@ agregó es el camino desde el teléfono hasta ese dispositivo.
 | | |
 |---|---|
 | La pantalla | `interno/luces.html` — entra por la barra, con el permiso `luces` |
-| El puente | `api/tuya.mjs` — función serverless en **Vercel** |
+| El puente | `api/tuya.mjs` — servido desde el **Netlify de Casa Verde** (`serene-scone-76bd4e`) por `netlify/functions/luces-remate.mjs`, desde el 1-oct-2026 |
 | Configuración del puente | `PUENTE_LUCES` en `interno/utils.js` |
 | Registro | colección `lucesRegistro` de Firestore, reglas **v0.7** |
-| Pruebas | `node pruebas/luces.mjs` — 24 casos, sin npm |
+| Pruebas | `node pruebas/luces.mjs` — 28 casos, sin npm (4 pasan por el adaptador de Netlify) |
 
 ---
 
@@ -29,9 +29,8 @@ servidor sea **lo más chico posible**: una sola función, que no sabe nada del
 negocio y sólo hace tres cosas — comprobar quién pide, comprobar que puede, y
 firmar.
 
-**El sitio no se mudó a Vercel.** GitHub Pages sigue publicando todo. Vercel
-sirve únicamente `/api/tuya`; cualquier otra dirección de ese dominio redirige
-al sitio real (`vercel.json`).
+**El sitio no se mudó.** GitHub Pages sigue publicando todo. El servidor sirve
+únicamente el puente, desde el Netlify de Casa Verde (§ 3.2).
 
 ---
 
@@ -50,7 +49,7 @@ Firestore igual que si la hiciera el navegador, y quien decide sigue siendo la
 ficha: `activo == true`, y `rol == 'admin'` o `permisos.luces == true`.
 
 > **Que el puente no tenga credencial de servidor de Firebase es deliberado.**
-> Un *service account* en Vercel sería una llave maestra de toda la base —
+> Un *service account* en el servidor sería una llave maestra de toda la base —
 > ventas, documentos, llaves de compradores — para prender una luz. Así como
 > está, el puente no puede leer nada que la propia persona no pudiera leer.
 
@@ -81,29 +80,46 @@ Para saber el nombre del comando de cada aparato (`switch_1`, `switch_led`,
 *instructions*. Si no coincide, el puente firma bien y Tuya responde que el
 código no existe.
 
-### 3.2 · En Vercel
+### 3.2 · En Netlify (antes decía Vercel)
 
-Crear un proyecto **conectado a `rematetaller/remate`**. No hay build: Vercel
-detecta la carpeta `api/` y despliega la función sola. Cada push desde la web
-de GitHub va a desplegar solo.
+**Hasta el 1-oct-2026 este paso era crear un proyecto en Vercel**, y no se pudo:
+conectar la cuenta de GitHub `rematetaller` con la de Vercel volvía siempre a
+«Install» sin terminar. Mauro: «hazlo, porque me sigue dando vueltas». El
+puente se sirve desde el **Netlify de Casa Verde** (`serene-scone-76bd4e`), que
+ya es el servidor del ecosistema —`claude-proxy`, los avisos por WhatsApp— y se
+despliega con un zip a mano. Ganancia aparte: las claves de servidor de todo el
+ecosistema quedan en UNA consola. `api/tuya.mjs` no cambió una línea:
+`netlify/functions/luces-remate.mjs` sólo traduce el pedido de Netlify al
+`req`/`res` que espera, y el banco lo prueba.
 
-Después, en **Settings → Environment Variables**, cargar los nombres que están
-en [`.env.example`](.env.example):
+**El zip.** El de Casa Verde lleva sus funciones **y** estas tres, con las
+mismas rutas que en este repositorio: `netlify/functions/luces-remate.mjs`,
+`api/tuya.mjs` y `api/_sesion.mjs`. El zip reemplaza el sitio entero: uno sin
+`luces-remate` apaga las luces en silencio, igual que uno sin las funciones de
+Casa Verde apaga lo de ellos. Lo lista `netlify.toml` de Casa Verde.
+
+**Las variables**, en Netlify → `serene-scone-76bd4e` → **Project configuration
+→ Environment variables** (los nombres están en [`.env.example`](.env.example)):
 
 ```
 TUYA_CLIENT_ID        el Access ID
 TUYA_CLIENT_SECRET    el Access Secret
 TUYA_REGION           us
-TUYA_LUCES            {"deposito":{"id":"...","label":"Depósito","comando":"switch_1"}}
+TUYA_LUCES            {"deposito":{"id":"...","label":"Luces depósito","comando":"switch_1"},
+                       "entrada":{"id":"...","label":"Entrada y taller","comando":"switch_1"}}
 ORIGENES_PERMITIDOS   https://rematetaller.github.io
 ```
 
-> **Los valores los carga Mauro a mano, en la web de Vercel.** Ningún chat pide
+Las dos luces son el producto `s180v3.1` y las dos usan `switch_1` (Device
+Debugging, 1-oct-2026). Los identificadores reales van sólo ahí.
+
+> **Los valores los carga Mauro a mano, en la web de Netlify.** Ningún chat pide
 > el valor de una credencial ni lo carga por API. Ver `PROTOCOLO-SECRETOS.md`,
 > en `protocolos/` del repo **público** `maurogasta-crypto/datos`.
 
-Y después **volver a desplegar**: Vercel no aplica variables nuevas a un
-despliegue que ya existe.
+Y después **volver a desplegar** (Deploys → el último → *Options → Retry
+deploy*, o soltar el zip de nuevo) y **publicarlo** (*Publish deploy*): el
+proyecto tiene la publicación automática bloqueada a propósito.
 
 ### 3.3 · En la consola de Firebase
 
@@ -113,10 +129,10 @@ pero el registro de movimientos no se puede escribir ni leer.
 
 ### 3.4 · En este repositorio
 
-Editar **una línea** de `interno/utils.js`:
+**Hecho el 1-oct-2026** (`utils.js` v1.19):
 
 ```js
-export const PUENTE_LUCES = "https://EL-PROYECTO.vercel.app/api/tuya";
+export const PUENTE_LUCES = "https://serene-scone-76bd4e.netlify.app/.netlify/functions/luces-remate";
 ```
 
 Vacío, la pantalla de luces explica qué falta en vez de fallar con un error de
@@ -155,9 +171,9 @@ falsificado.
 | Lo que se ve | Qué es |
 |---|---|
 | «Falta configurar la dirección del puente» | El paso 3.4: `PUENTE_LUCES` está vacío |
-| «No se pudo llegar al puente» | El proyecto de Vercel no existe todavía, o la dirección está mal escrita |
+| «No se pudo llegar al puente» / «El puente respondió 404» | El zip de Netlify no trae `luces-remate`, o no se publicó (*Publish deploy*) |
 | «origen no permitido» | `ORIGENES_PERMITIDOS` no incluye la dirección desde la que se abrió el panel |
-| «faltan variables de entorno: …» | Están sin cargar en Vercel, **o** se cargaron y no se volvió a desplegar |
+| «faltan variables de entorno: …» | Están sin cargar en Netlify, **o** se cargaron y no se volvió a desplegar y publicar |
 | «tu cuenta no tiene habilitadas las luces» | Falta tildar el permiso en Configuración |
 | «las reglas no dejan leer tu ficha» | Las reglas publicadas no son las de este repositorio |
 | «Tuya rechazó las credenciales» | Access ID/Secret mal, región equivocada, o falta autorizar *IoT Core* (paso 3.1.3) |
@@ -201,6 +217,6 @@ falsificado.
 ---
 
 **Desde la tanda 30 (30-sep-2026)** la verificación de la sesión vive en
-`api/_sesion.mjs`, afuera de `tuya.mjs`: el mismo código, listo para una segunda
-función. La IA del inventario **no** es una función de este proyecto: usa la de
-Casa Verde (ver `CLAUDE.md`).
+`api/_sesion.mjs`, afuera de `tuya.mjs`. **Desde la tanda 31 (1-oct-2026)** el
+puente se sirve desde Netlify y no desde Vercel (§ 3.2). La IA del inventario
+**no** es una función de este proyecto: usa la de Casa Verde (ver `CLAUDE.md`).

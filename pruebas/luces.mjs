@@ -350,5 +350,52 @@ await prueba("un método que no corresponde no pasa", async () => {
   assert.equal(res.codigo, 405);
 });
 
+// ═══ Netlify ════════════════════════════════════════════════════════════
+// Desde el 1-oct-2026 el puente se sirve desde el Netlify de Casa Verde, por
+// `netlify/functions/luces-remate.mjs`. Es una traducción y nada más: lo que
+// se prueba es que no pierda ni agregue nada en el camino.
+titulo("Netlify: el mismo puente, traducido");
+const { handler: netlify } = await import("../netlify/functions/luces-remate.mjs");
+const evento = ({ metodo = "GET", origen = ORIGEN, token = firmarToken(), cuerpo = null, base64 = false, mayusculas = false } = {}) => {
+  const h = {};
+  if (origen !== null) h[mayusculas ? "Origin" : "origin"] = origen;
+  if (token !== null) h[mayusculas ? "Authorization" : "authorization"] = "Bearer " + token;
+  let body = cuerpo === null ? null : JSON.stringify(cuerpo);
+  if (body && base64) body = Buffer.from(body).toString("base64");
+  return { httpMethod: metodo, headers: h, body, isBase64Encoded: base64 };
+};
+
+await prueba("el preflight sale con CORS para el panel, y nada para un extraño", async () => {
+  const r = await netlify(evento({ metodo: "OPTIONS", token: null }));
+  assert.equal(r.statusCode, 204);
+  assert.equal(r.headers["Access-Control-Allow-Origin"], ORIGEN);
+  const x = await netlify(evento({ metodo: "OPTIONS", token: null, origen: "https://otro.com" }));
+  assert.equal(x.statusCode, 403);
+  assert.equal(x.headers["Access-Control-Allow-Origin"], undefined);
+});
+await prueba("sin sesión no pasa, y la respuesta es JSON", async () => {
+  const r = await netlify(evento({ token: null }));
+  assert.equal(r.statusCode, 401);
+  assert.equal(JSON.parse(r.body).ok, false);
+  assert.ok(/json/.test(r.headers["Content-Type"]));
+});
+await prueba("la lista de luces llega igual que por Vercel, con cabeceras en mayúscula o minúscula", async () => {
+  ficha = { activo: true, rol: "", permisos: { luces: true } };
+  const r = await netlify(evento({ mayusculas: true }));
+  assert.equal(r.statusCode, 200, r.body);
+  const j = JSON.parse(r.body);
+  assert.equal(j.ok, true); assert.ok(j.luces.some((l) => l.alias === "deposito"));
+  assert.equal(r.headers["Cache-Control"], "no-store");
+});
+await prueba("prender: el cuerpo llega como texto, y también en base64", async () => {
+  ficha = { activo: true, rol: "", permisos: { luces: true } };
+  await new Promise((ok) => setTimeout(ok, 750)); // el freno por aparato de las pruebas de arriba
+  let r = await netlify(evento({ metodo: "POST", cuerpo: { luz: "patio", encender: true } }));
+  assert.equal(r.statusCode, 200, r.body);
+  r = await netlify(evento({ metodo: "POST", base64: true, cuerpo: { luz: "oficina", encender: false } }));
+  assert.equal(r.statusCode, 200, r.body);
+  assert.equal(JSON.parse(r.body).encendida, false);
+});
+
 console.log(`\n${pasadas} pasadas, ${fallidas} fallidas\n`);
 process.exit(fallidas ? 1 : 0);

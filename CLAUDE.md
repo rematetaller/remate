@@ -9,15 +9,20 @@ HTML/CSS/JS servido tal cual, módulos ES por CDN, sin build, sin npm, sin
 No hay workflows propios (no existe carpeta `.github/`).
 
 **Hay exactamente UNA función de servidor, desde el 2026-09-09** (tanda 25):
-`api/tuya.mjs`, desplegada en **Vercel** desde este mismo repositorio, que
-enciende y apaga las luces del depósito. Existe porque la nube de Tuya exige
-firmar cada pedido con un secreto (HMAC-SHA256), y un secreto en el navegador
-no es un secreto. **El sitio no se mudó a Vercel:** GitHub Pages sigue
-publicando todo, y Vercel sirve únicamente `/api/tuya` — cualquier otra
-dirección de ese dominio redirige al sitio real (`vercel.json`). Todo lo demás
-del proyecto sigue siendo estático puro. El detalle está en `LUCES.md`.
-La verificación de la sesión vive en `api/_sesion.mjs` (el `_` hace que Vercel
-no la publique como ruta), lista para una segunda función si algún día hace falta.
+`api/tuya.mjs`, que enciende y apaga las luces del depósito. Existe porque la
+nube de Tuya exige firmar cada pedido con un secreto (HMAC-SHA256), y un secreto
+en el navegador no es un secreto. **El sitio no se mudó:** GitHub Pages sigue
+publicando todo. El detalle está en `LUCES.md`.
+
+**Desde el 2026-10-01 (tanda 31) se sirve desde el Netlify de Casa Verde**
+(`serene-scone-76bd4e`), no desde Vercel. Se escribió para Vercel, y el proyecto
+no se pudo crear: conectar la cuenta de GitHub `rematetaller` volvía siempre a
+«Install». `netlify/functions/luces-remate.mjs` traduce el pedido de Netlify al
+`req`/`res` de `api/tuya.mjs`, que no cambió; `vercel.json` se retiró. **El zip de
+Netlify lo arma Casa Verde y tiene que llevar estas tres piezas** con las mismas
+rutas: si falta una, las luces se apagan en silencio. Ganancia aparte: las
+claves de servidor del ecosistema quedan en UNA consola. La verificación de la
+sesión vive en `api/_sesion.mjs`.
 
 **La IA del inventario NO es una función de este repositorio** (tanda 30,
 30-sep-2026). La foto se le pregunta a Gemini por `claude-proxy`, la función de
@@ -70,8 +75,9 @@ ningún chat — de Mauro o de un agente. El historial de git es permanente: bor
 un archivo después no alcanza. Este proyecto documenta acá solo nombres, tipo y
 ubicación del valor real — nunca el valor.
 
-¿Usa variables de entorno? **Sí, desde el 2026-09-09** — las lee `api/tuya.mjs`
-en Vercel, y son las cinco primeras del proyecto. Hasta esa fecha la respuesta
+¿Usa variables de entorno? **Sí, desde el 2026-09-09** — las lee `api/tuya.mjs`,
+y son las cinco primeras del proyecto. Desde el 2026-10-01 viven en el **Netlify
+de Casa Verde**, que es donde se sirve el puente. Hasta esa fecha la respuesta
 era «no», y era correcta: no había función que las leyera. Siguen sin existir
 GitHub Secrets, porque sigue sin haber workflows que los consuman.
 
@@ -87,13 +93,13 @@ siguen pendientes, y si algún día entran, sus variables se agregan a esta tabl
 | Contraseña de cada administrador | Login a `interno/login.html` | dato en runtime | Firebase Authentication. **No se comparten entre personas**: se entra por "Recuperar contraseña", que manda el mail de Firebase | `signInWithEmailAndPassword` en `utils.js` | leído del repo, 2026-09-07 |
 | `usuarios/{uid}` → `rol`, `activo`, `permisos` | Quién entra y qué puede hacer | dato en runtime | Firestore, protegido por las reglas publicadas en la consola | `configuracion.html`, `utils.js` | leído del repo, 2026-09-07 |
 | `llaves/{codigo}` | La llave del comprador **es la credencial** | dato en runtime | Firestore. El `get` por código está abierto a propósito; **listar llaves sin sesión está cerrado** — sería entregar todas las credenciales de una | `index.html`, `comprador.html`, `interno/llaves.html` | doc § 5.1, 2026-09-07 |
-| `TUYA_CLIENT_ID` | Access ID de la app de Tuya IoT Platform; identifica la aplicación al firmar | secreto de infraestructura | Vercel → proyecto de remate → Settings → Environment Variables | `api/tuya.mjs` | `api/tuya.mjs:60`, 2026-09-09 |
-| `TUYA_CLIENT_SECRET` | Access Secret: la clave con la que se firma cada pedido a Tuya (HMAC-SHA256) | secreto de infraestructura | Vercel → mismo proyecto → Environment Variables | `api/tuya.mjs` | `api/tuya.mjs:61`, 2026-09-09 |
-| `TUYA_REGION` | Centro de datos de Tuya: `us`/`eu`/`cn`/`in` (por defecto `us`) | configuración, no secreto | Vercel → mismo proyecto | `api/tuya.mjs` | `api/tuya.mjs:65`, 2026-09-09 |
-| `TUYA_LUCES` | JSON alias → identificador del aparato, etiqueta y comando. El panel manda el **alias**; el identificador real no sale del servidor | configuración con datos internos | Vercel → mismo proyecto | `api/tuya.mjs` | `api/tuya.mjs:70`, 2026-09-09 |
-| `ORIGENES_PERMITIDOS` | Desde qué direcciones se acepta un pedido (CORS). Lista blanca: un `*` acá dejaría que cualquier página del mundo usara la sesión de quien la visite | configuración de seguridad | Vercel → mismo proyecto. Por defecto `https://rematetaller.github.io` | `api/tuya.mjs` | `api/tuya.mjs:90`, 2026-09-09 |
+| `TUYA_CLIENT_ID` | Access ID de la app de Tuya IoT Platform; identifica la aplicación al firmar | secreto de infraestructura | Netlify de Casa Verde (`serene-scone-76bd4e`) → Project configuration → Environment variables (hasta el 2026-10-01 decía Vercel, que nunca se creó) | `api/tuya.mjs` | `api/tuya.mjs:60`, 2026-09-09 |
+| `TUYA_CLIENT_SECRET` | Access Secret: la clave con la que se firma cada pedido a Tuya (HMAC-SHA256) | secreto de infraestructura | Netlify → mismo proyecto → Environment variables | `api/tuya.mjs` | `api/tuya.mjs:61`, 2026-09-09 |
+| `TUYA_REGION` | Centro de datos de Tuya: `us`/`eu`/`cn`/`in` (por defecto `us`) | configuración, no secreto | Netlify → mismo proyecto | `api/tuya.mjs` | `api/tuya.mjs:65`, 2026-09-09 |
+| `TUYA_LUCES` | JSON alias → identificador del aparato, etiqueta y comando. El panel manda el **alias**; el identificador real no sale del servidor | configuración con datos internos | Netlify → mismo proyecto | `api/tuya.mjs` | `api/tuya.mjs:70`, 2026-09-09 |
+| `ORIGENES_PERMITIDOS` | Desde qué direcciones se acepta un pedido (CORS). Lista blanca: un `*` acá dejaría que cualquier página del mundo usara la sesión de quien la visite | configuración de seguridad | Netlify → mismo proyecto. Por defecto `https://rematetaller.github.io` | `api/tuya.mjs` | `api/tuya.mjs:90`, 2026-09-09 |
 | Clave de Gemini (la IA del inventario) | Identifica la foto, busca su ficha y sugiere un precio en Uruguay | secreto de infraestructura | **No está en este proyecto**: es `GEMINI_API_KEY` de Casa Verde, en su Netlify. Remate llama a `claude-proxy` sin credenciales | `interno/identificar.js` | 2026-09-30 |
-| `PUENTE_LUCES` | La dirección de la función. **No es un secreto** —sin un token de Firebase válido no hace nada— y por eso vive en el código, no en el entorno | público por diseño | `interno/utils.js`, una sola línea. Se edita a mano al crear el proyecto en Vercel | `luces.html` vía `utils.js` | `interno/utils.js:265`, 2026-09-14 |
+| `PUENTE_LUCES` | La dirección de la función. **No es un secreto** —sin un token de Firebase válido no hace nada— y por eso vive en el código, no en el entorno | público por diseño | `interno/utils.js`: `…netlify.app/.netlify/functions/luces-remate` | `luces.html` vía `utils.js` | `utils.js` v1.19, 2026-10-01 |
 | Credencial de servidor de Firebase (*service account*) | Le permitiría a la función leer toda la base | **ausente por diseño** | No existe. La función lee `usuarios/{uid}` con el token de la propia persona, así que no puede leer nada que ella no pudiera leer. Un service account sería una llave maestra de ventas, documentos y llaves para prender una luz | Nadie | ausencia confirmada en todo el repo, 2026-09-09 |
 | Reglas de Firestore | Autoridad real de acceso | configuración de seguridad (copia en repo, autoridad en consola) | La autoridad sigue siendo lo publicado en la **consola de Firebase**. La copia vive en `/firestore.rules` (raíz), **v1.0** (2026-09-30, entra `avisos_contacto`; la v0.9 es la publicada hasta que Mauro pegue ésta) | Firestore | **v0.9 publicada por Mauro el 2026-09-13** (`remate:L6` en el panel). Verificado desde una sesión lo que se puede verificar: el agente entra y `reportes/` contesta. Que lo publicado sea exactamente la v0.9 sólo lo confirma él — el acceso del agente acá es un comodín con exclusiones, así que leer una colección no distingue una versión de otra |
 | `avisos_contacto/{uid}` | Número y clave de CallMeBot de cada persona, y si quiere que Claude le escriba (`agente`). Una clave de CallMeBot sólo sirve para mandarle mensajes a ese número | dato en runtime | Firestore. Lo carga cada uno en la hoja de cuenta → «Mis avisos por WhatsApp»; lo lee su dueño, y el agente de a uno | `utils.js` (`mostrarAvisos`), `datos/herramientas/avisos.mjs` | reglas v1.0, 2026-09-30 |
@@ -220,7 +226,7 @@ verdad después del cambio.
   *ese mismo token* y recién ahí firma contra Tuya. Nada de credenciales del
   lado del cliente, y nada de credenciales de servidor de Firebase del lado del
   puente. Ver `LUCES.md`.
-- **Antes de subir se corren `node pruebas/luces.mjs`** (24 casos) **y `node
+- **Antes de subir se corren `node pruebas/luces.mjs`** (28 casos, 4 por el adaptador de Netlify) **y `node
   pruebas/identificar.mjs`** (13 casos), los dos sin npm ni red, y se comprueba
   que parsee el JavaScript que vive adentro de los `.html`.
 - **Lo que trae Gemini es una PROPUESTA** (tanda 30): título, descripción,

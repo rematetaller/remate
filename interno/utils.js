@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.18)
+// utils.js — Núcleo compartido de remateTaller (v1.19)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 //
@@ -12,6 +12,12 @@
 // y mientras tanto el inventario derivó y las reglas quedaron dos
 // versiones atrás sin que nada avisara. Si volvés a anotar un cambio
 // acá, anotalo también allá, en la misma tanda.
+//
+// v1.19 (tanda 31, 1-oct-2026):
+//  · EL PUENTE DE LUCES, EN NETLIFY. `PUENTE_LUCES` apunta a la función
+//    `luces-remate` del Netlify de Casa Verde, y no a Vercel: el proyecto de
+//    Vercel no se pudo crear (conectar GitHub daba vueltas). La función es
+//    la misma `api/tuya.mjs`, traducida por `netlify/functions/luces-remate.mjs`.
 //
 // v1.18 (tanda 30, 30-sep-2026):
 //  · QUÉ ES LO DE LA FOTO. `identificarFoto()` reduce la foto del
@@ -271,16 +277,16 @@ export const CLOUDINARY = {
 };
 
 // ---------- El puente a las luces (Tuya) ----------
-// La dirección de la única función de servidor del proyecto, desplegada en
-// Vercel desde la carpeta `api/` de este mismo repositorio. NO es un
+// La dirección de la única función de servidor del proyecto: `api/tuya.mjs`
+// de este repositorio, servida desde el Netlify de Casa Verde
+// (`serene-scone-76bd4e`) por `netlify/functions/luces-remate.mjs`. NO es un
 // secreto: la función no hace nada sin un token de Firebase válido de una
 // cuenta activa con el permiso `luces`. Las credenciales de Tuya viven
-// enteras del otro lado, en las variables de entorno de Vercel.
+// enteras del otro lado, en las variables de entorno de ese Netlify.
 //
-// ES LO ÚNICO QUE HAY QUE EDITAR A MANO al crear el proyecto en Vercel.
 // Vacío = la pantalla de luces lo dice y explica qué falta, en vez de
 // fallar con un error de red que no significa nada. Ver LUCES.md.
-export const PUENTE_LUCES = "";
+export const PUENTE_LUCES = "https://serene-scone-76bd4e.netlify.app/.netlify/functions/luces-remate";
 
 // =====================================================
 // AUTENTICACIÓN Y CONTROL DE ACCESO (admins)
