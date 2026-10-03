@@ -1106,6 +1106,22 @@ el sistema por andando.
 
 ---
 
+## v0.5.24 — La consulta despierta al chat (Tanda 32 · 3-oct-2026)
+
+> **Entrega:** `interno/utils.js` **v1.20** (`avisarClaude`, `AVISAR_CLAUDE`). La función
+> que recibe el llamado es `netlify/functions/avisar-claude.mjs` de **Casa Verde**, con su
+> banco; no hay función nueva en este repositorio.
+
+**Qué pasó:** Mauro pidió que la consulta de alguien registrado desde el formulario de
+cualquier sitio despierte al chat de Claude en el momento, sin esperar la ronda de las
+07:47. Al guardar un reporte, el panel le manda a esa función la base y el id del
+reporte con el token de la sesión; la función verifica la ficha activa en `usuarios/`
+con ese mismo token y dispara la rutina «Consulta en vivo». **El texto que escribió la
+persona no viaja**: el chat lo lee de la base, como dato. Si la llamada falla, no se
+nota: el reporte ya quedó guardado y la ronda diaria lo levanta igual.
+
+---
+
 ## v0.5.23 — Las luces, desde Netlify (Tanda 31 · 1-oct-2026)
 
 > **Entrega:** `netlify/functions/luces-remate.mjs` **1.0** (nuevo), `interno/utils.js`

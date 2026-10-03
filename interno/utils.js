@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.19)
+// utils.js — Núcleo compartido de remateTaller (v1.20)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 //
@@ -12,6 +12,12 @@
 // y mientras tanto el inventario derivó y las reglas quedaron dos
 // versiones atrás sin que nada avisara. Si volvés a anotar un cambio
 // acá, anotalo también allá, en la misma tanda.
+//
+// v1.20 (tanda 32, 3-oct-2026):
+//  · CONSULTA EN VIVO. Después de guardar un reporte, `avisarClaude()`
+//    despierta al chat de Claude por la función `avisar-claude` del Netlify
+//    de Casa Verde: manda la base y el id, con el token de la sesión, y nada
+//    de lo escrito. Nunca bloquea: si falla, la ronda diaria lo trae igual.
 //
 // v1.19 (tanda 31, 1-oct-2026):
 //  · EL PUENTE DE LUCES, EN NETLIFY. `PUENTE_LUCES` apunta a la función
@@ -928,7 +934,7 @@ async function enviarReporte() {
     // `verificarAuth`—, pero se pide igual: una función que puede llamarse
     // sola no debe depender de que alguien haya cargado antes.
     await cargarFirebase();
-    await addDoc(collection(db, "reportes"), {
+    const ref = await addDoc(collection(db, "reportes"), {
       uid: _usuario.uid,
       nombre: _usuario.nombre || "",
       email: _usuario.email || "",
@@ -942,6 +948,7 @@ async function enviarReporte() {
       estado: "nuevo",          // la regla exige que nazca así
       creadoEn: serverTimestamp()
     });
+    avisarClaude(ref.id);       // v1.20: despierta al chat en el acto
     document.getElementById("rtRep").style.display = "none";
     toast("Reporte enviado. Gracias.");
   } catch (e) {
@@ -967,6 +974,23 @@ async function enviarReporte() {
 // respuesta se LEE, como hace Casa Verde con `CV2._leerRespuestaWa`.
 // =====================================================
 export const PUENTE_WA = "https://serene-scone-76bd4e.netlify.app/.netlify/functions/notify-whatsapp";
+
+// CONSULTA EN VIVO (v1.20). La misma forma que CV2.avisarClaude de Casa
+// Verde: sólo la base y el id del reporte, con el token de la sesión. La
+// función verifica la ficha activa y dispara la rutina del chat de Claude.
+export const AVISAR_CLAUDE = "https://serene-scone-76bd4e.netlify.app/.netlify/functions/avisar-claude";
+async function avisarClaude(reporteId) {
+  try {
+    const u = auth && auth.currentUser;
+    if (!u || !reporteId) return;
+    const t = await u.getIdToken();
+    await fetch(AVISAR_CLAUDE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + t },
+      body: JSON.stringify({ base: "remate", reporteId })
+    });
+  } catch (e) { /* silencio a propósito: el reporte ya quedó guardado */ }
+}
 
 export function leerRespuestaWa(txt) {
   const crudo = String(txt || "");

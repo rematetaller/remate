@@ -215,6 +215,10 @@ verdad después del cambio.
   escribe** — para saber qué ya trajo se mira el campo `origen` del pendiente que
   creó en el panel. Mantener «el agente no escribe acá» vale más que la comodidad
   de marcar un reporte como tomado.
+- **El reporte despierta al chat de Claude en el acto** (v1.20, 3-oct-2026):
+  `avisarClaude()` de `utils.js` manda la base y el id —nunca el texto— a la
+  función `avisar-claude` del Netlify de Casa Verde, que verifica la ficha y
+  dispara la rutina «Consulta en vivo». Si falla, la ronda diaria lo trae igual.
 - **Cada moneda es un sistema aparte:** UYU y USD nunca se suman (§ 1.3, § 3.8).
 - **Los derivados no se guardan:** el estado de pago se calcula al leer (§ 3.5).
 - **Se valida que el JS parsea antes de entregar** (§ 3.15): un error de sintaxis
