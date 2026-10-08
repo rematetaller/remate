@@ -22,6 +22,15 @@ details summary::-webkit-details-marker { display:none; }
 .pago-fila { border-top:1px dashed var(--c-borde); padding:6px 0; font-size:13px; }
 .inp-mini { width:100%; padding:8px; font-size:15px; }
 .btn-mini { padding:8px 10px; font-size:13px; width:auto; flex:none; margin-top:0; }
+/* v2.3 · venta directa */
+#vdForm .vd-item { border:1px solid var(--c-borde); border-radius:8px; padding:10px; margin:8px 0; }
+#vdForm label { margin:8px 0 2px; font-size:12px; }
+#vdForm textarea { font-family:inherit; font-size:15px; }
+#vdForm .vd-nuevo { font-size:12px; color:var(--c-primario); margin-top:4px; }
+#vdForm .vd-fotos { display:flex; gap:6px; align-items:center; margin-top:6px; }
+#vdForm .vd-fotos .thumb { width:48px; height:48px; }
+.check { display:flex; gap:8px; align-items:center; margin:8px 0; font-size:14px; }
+.check input { width:auto; }
 </style>
 </head>
 <body>
@@ -30,6 +39,10 @@ details summary::-webkit-details-marker { display:none; }
 
 <main>
   <h1>Ventas</h1>
+
+  <button class="btn" id="btnVentaDirecta" style="display:none; margin-bottom:10px;">
+    <span class="material-icons">add_shopping_cart</span> Venta directa</button>
+  <div class="card" id="vdForm" style="display:none;"></div>
 
   <div class="kpis">
     <div class="kpi"><div class="num" id="kpiCant">—</div><div class="lbl">Ventas</div></div>
@@ -57,11 +70,15 @@ details summary::-webkit-details-marker { display:none; }
 </main>
 
 <script type="module">
+// ventas.html v2.3 (tanda 33, 8-oct-2026): «＋ Venta directa» — comprador,
+// artículo, venta y cobro en un solo formulario (remate:V1). La lógica está
+// en venta-directa.js, que no toca Firebase y tiene su banco.
 import {
   verificarAuth, renderNav, db, toast, fmtMoneda, fmtFecha, iniciarAyuda, mostrarFoto,
   doc, getDoc, updateDoc, addDoc, collection, getDocs, query, orderBy,
-  serverTimestamp
+  serverTimestamp, writeBatch, Timestamp, puede, subirFoto, escapar
 } from "./utils.js";
+import { armarVentaDirecta, productoExistente, compradorExistente, clave } from "./venta-directa.js";
 
 iniciarAyuda("Cómo se gestiona una venta", `
 <p>Una venta nace al validar un pedido y es un registro <strong>inmutable</strong>: los artículos y precios no cambian más. Lo que sí se gestiona acá es el <strong>pago</strong> y la <strong>entrega</strong>.</p>
@@ -79,6 +96,14 @@ iniciarAyuda("Cómo se gestiona una venta", `
 <p><span class="badge neutro">Pendiente</span> → <span class="badge aviso">Preparada</span> (mercadería lista y apartada) → <span class="badge ok">Entregada</span> (en manos del comprador). Cada cambio queda en el historial con quién y cuándo.</p>
 <h3>Preparar el paquete</h3>
 <p>Tocá cualquier artículo de la venta para ver sus fotos, descripción y <strong>ubicación en el depósito</strong>.</p>
+<h3>Venta directa</h3>
+<p>Para lo que se vende sin pasar por una llave (en el depósito, por teléfono). Con <strong>＋ Venta directa</strong> se carga todo de una vez: el comprador, el o los artículos y el cobro.</p>
+<ul>
+<li>Lo único obligatorio es <strong>qué se vendió y a cuánto</strong> (precio por unidad). El comprador, la foto, la categoría y la descripción se completan después si hace falta.</li>
+<li>Si el artículo <strong>no estaba en el inventario</strong>, se da de alta solo, ya vendido (sin stock, así no aparece en el catálogo). Si estaba, se descuenta el stock como al validar un pedido.</li>
+<li>Si el comprador <strong>no estaba</strong>, queda registrado; si ya estaba (mismo nombre o teléfono), se usa ese.</li>
+<li>Todo entra junto o no entra nada: no quedan medias ventas.</li>
+</ul>
 `);
 
 let ventas = [];
@@ -93,6 +118,12 @@ verificarAuth(async (user, datos) => {
   await Promise.all([cargarVentas(), cargarMetodos()]);
   kpis();
   render();
+  // Una venta directa crea una venta y pone precio: es de quien valida.
+  if (puede("validar")) {
+    const b = document.getElementById("btnVentaDirecta");
+    b.style.display = "";
+    b.addEventListener("click", abrirVentaDirecta);
+  }
 });
 
 async function cargarVentas() {
@@ -218,7 +249,7 @@ function render() {
     const itemsHtml = (v.items || []).map((it, i) => `
       <div class="item-fila itemProd" data-v="${v.id}" data-i="${i}" data-prod="${it.productoId || ""}">
         <span class="material-icons" style="font-size:16px; vertical-align:-3px; color:var(--c-primario);">visibility</span>
-        ${it.descripcion} ${it.esLote ? "(LOTE, " + it.cantidad + " u.)" : "× " + it.cantidad}
+        ${escapar(it.descripcion)} ${it.esLote ? "(LOTE, " + it.cantidad + " u.)" : "× " + it.cantidad}
         — <strong>${fmtMoneda(it.precioFinal, it.moneda)}</strong>
       </div>
       <div class="prod-detalle" id="pd-${v.id}-${i}" style="display:none;"></div>`).join("");
@@ -226,13 +257,15 @@ function render() {
     return `<div class="card"><details data-v="${v.id}" ${abiertas.has(v.id) ? "open" : ""}>
       <summary>
         <div class="fila" style="justify-content:space-between;">
-          <strong>${(v.comprador && v.comprador.nombre) || "—"}</strong>
+          <strong>${escapar((v.comprador && v.comprador.nombre) || "—")}</strong>
           <strong style="color:var(--c-primario);">${partes.join(" + ") || "—"}</strong>
         </div>
-        <div style="margin:4px 0;">${badgePago(estadoPago(v))} ${badgeEntrega(estadoEntrega(v))}</div>
-        <span class="texto-suave">${fmtFecha(v.fecha)} · vendió ${v.vendedorNombre || "—"} ·
-        ${(v.items || []).length} ítem(s) · Tel: ${(v.comprador && v.comprador.telefono) || "—"}</span>
+        <div style="margin:4px 0;">${badgePago(estadoPago(v))} ${badgeEntrega(estadoEntrega(v))}${v.origen === "directa" ? ' <span class="badge neutro">Directa</span>' : ""}</div>
+        <span class="texto-suave">${fmtFecha(v.fecha)} · vendió ${escapar(v.vendedorNombre || "—")} ·
+        ${(v.items || []).length} ítem(s) · Tel: ${escapar((v.comprador && v.comprador.telefono) || "—")}</span>
       </summary>
+      ${v.origen === "directa" && puede("validar") ? `<button class="btn secundario btn-mini btnEditarComprador" data-v="${v.id}" style="margin-top:8px;">
+        <span class="material-icons" style="font-size:16px;">edit</span> Comprador</button>` : ""}
       <p class="texto-suave" style="margin:8px 0 0; font-size:12px;">Tocá un artículo para ver fotos y ubicación.</p>
       ${itemsHtml}
       ${seccionEntrega(v)}
@@ -264,8 +297,8 @@ function seccionPago(v) {
 
   const regs = pagosDe(v).map((r) =>
     `<div class="pago-fila">${fmtFecha(r.fecha)} · <strong>${fmtMoneda(r.monto, r.moneda)}</strong> · ${r.metodo || "—"}
-     ${r.nota ? `<br><span class="texto-suave">${r.nota}</span>` : ""}
-     <br><span class="texto-suave">registró ${r.registradoNombre || "—"}</span></div>`).join("");
+     ${r.nota ? `<br><span class="texto-suave">${escapar(r.nota)}</span>` : ""}
+     <br><span class="texto-suave">registró ${escapar(r.registradoNombre || "—")}</span></div>`).join("");
 
   const monedaDefault = (saldo.USD > 0 && saldo.UYU <= 0) ? "USD" : "UYU";
   const form = est === "pagado" ? "" : `
@@ -360,6 +393,30 @@ function enganchar(cont) {
     });
   });
 
+  // v2.3: en una venta directa el comprador se corrige después (la regla
+  // deja cambiar sólo `comprador` y `compradorId`, y sólo en las directas).
+  cont.querySelectorAll(".btnEditarComprador").forEach((b) => {
+    b.addEventListener("click", async (ev) => {
+      ev.preventDefault();
+      const v = ventas.find((x) => x.id === b.dataset.v);
+      const c = v.comprador || {};
+      const nombre = prompt("Nombre del comprador:", c.nombre === "Venta directa" ? "" : (c.nombre || ""));
+      if (nombre === null) return;
+      const telefono = prompt("Teléfono (opcional):", c.telefono || "");
+      if (telefono === null) return;
+      const comprador = { nombre: nombre.trim().slice(0, 120) || "Venta directa", telefono: telefono.trim().slice(0, 40) };
+      try {
+        await updateDoc(doc(db, "ventas", v.id), { comprador });
+        v.comprador = comprador;
+        toast("Comprador actualizado.", "ok");
+        render();
+      } catch (e) {
+        console.error(e);
+        toast("No se pudo cambiar" + (String(e.code || "").includes("permission") ? ": faltan publicar las reglas v1.1." : "."), "error");
+      }
+    });
+  });
+
   // Estado de entrega
   cont.querySelectorAll(".btnEntrega").forEach((b) => {
     b.addEventListener("click", async () => {
@@ -382,6 +439,213 @@ function enganchar(cont) {
       }
     });
   });
+}
+
+// ============ Venta directa (v2.3) ============
+let vd = null;                 // null = cerrado; si no, el estado del formulario
+let vdProductos = [], vdCompradores = [], vdCategorias = [];
+let vdSinCompradores = false;  // la regla de `compradores` todavía no publicada
+const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const itemVacio = () => ({ nombre: "", descripcion: "", cantidad: "1", precio: "", categoriaId: "", foto: null });
+
+async function abrirVentaDirecta() {
+  vd = { comprador: { nombre: "", telefono: "", nota: "" }, moneda: "UYU", fecha: hoyISO(),
+         items: [itemVacio()], pagoTodo: true, cobro: { monto: "", metodo: METODOS_BASE[0], nota: "" },
+         entregada: true, guardando: false };
+  document.getElementById("btnVentaDirecta").style.display = "none";
+  pintarVD();
+  const leer = async (col) => { const out = []; (await getDocs(collection(db, col))).forEach((d) => out.push({ id: d.id, ...d.data() })); return out; };
+  try { vdProductos = await leer("productos"); } catch (e) { console.error(e); vdProductos = []; }
+  try { vdCategorias = (await leer("categorias")).filter((c) => c.activa !== false); } catch (e) { vdCategorias = []; }
+  try { vdCompradores = await leer("compradores"); vdSinCompradores = false; }
+  catch (e) { console.error(e); vdCompradores = []; vdSinCompradores = true; }
+  // Los que compraron por llave también son compradores conocidos.
+  for (const v of ventas) {
+    const c = v.comprador || {};
+    if (c.nombre && c.nombre !== "Venta directa" && !compradorExistente(vdCompradores, c.nombre, c.telefono))
+      vdCompradores.push({ id: "", nombre: c.nombre, telefono: c.telefono || "", deVenta: true });
+  }
+  if (vd) pintarVD();
+}
+
+function cerrarVD() {
+  vd = null;
+  document.getElementById("vdForm").style.display = "none";
+  document.getElementById("btnVentaDirecta").style.display = "";
+}
+
+function totalVD() {
+  return vd.items.reduce((t, it) => {
+    const p = Number(String(it.precio).replace(",", ".")), c = Number(it.cantidad || 1);
+    return t + (p >= 0 && c > 0 ? p * c : 0);
+  }, 0);
+}
+
+function pintarVD() {
+  const box = document.getElementById("vdForm");
+  box.style.display = "";
+  const e = escapar;
+  const opcCat = (sel) => `<option value="">Sin categoría (después)</option>` +
+    vdCategorias.map((c) => `<option value="${e(c.id)}" ${c.id === sel ? "selected" : ""}>${e(c.nombre)}</option>`).join("");
+  const total = totalVD();
+  const ya = compradorExistente(vdCompradores, vd.comprador.nombre, vd.comprador.telefono);
+  box.innerHTML = `
+    <div class="fila" style="justify-content:space-between;"><strong>Venta directa</strong>
+      <button class="btn secundario btn-mini" id="vdCerrar">Cancelar</button></div>
+    <p class="texto-suave" style="margin:4px 0 0;">Obligatorio: qué se vendió y a cuánto. Lo demás se completa después.</p>
+
+    <label>Comprador</label>
+    <input id="vdNombre" list="vdListaComp" placeholder="Nombre (opcional)" value="${e(vd.comprador.nombre)}" autocomplete="off">
+    <datalist id="vdListaComp">${vdCompradores.map((c) => `<option value="${e(c.nombre)}">${e(c.telefono || "")}</option>`).join("")}</datalist>
+    <input id="vdTel" type="tel" placeholder="Teléfono (opcional)" value="${e(vd.comprador.telefono)}" style="margin-top:6px;">
+    <div class="vd-nuevo">${ya ? "✓ Ya registrado" + (ya.telefono ? " · " + e(ya.telefono) : "") : (vd.comprador.nombre || vd.comprador.telefono) ? "＋ Se registra como comprador nuevo" : ""}</div>
+    ${vdSinCompradores ? `<p class="texto-suave" style="font-size:12px;">Todavía no se puede guardar la lista de compradores (faltan publicar las reglas v1.1): el nombre queda en la venta igual.</p>` : ""}
+
+    <datalist id="vdListaProd">${vdProductos.map((p) => `<option value="${e(p.nombre || "")}">${p.cantidad > 0 ? "stock " + Number(p.cantidad) : "sin stock"}${p.precioSugerido != null ? " · " + e(fmtMoneda(p.precioSugerido, p.moneda)) : ""}</option>`).join("")}</datalist>
+    ${vd.items.map((it, i) => {
+      const ex = productoExistente(vdProductos, it);
+      return `<div class="vd-item">
+        <div class="fila" style="justify-content:space-between;"><strong>Artículo${vd.items.length > 1 ? " " + (i + 1) : ""}</strong>
+          ${vd.items.length > 1 ? `<button class="btn secundario btn-mini vdQuitar" data-i="${i}">Quitar</button>` : ""}</div>
+        <input class="vdCampo" data-i="${i}" data-k="nombre" list="vdListaProd" placeholder="Qué se vendió (ej.: casco)" value="${e(it.nombre)}" autocomplete="off">
+        <div class="vd-nuevo">${ex ? "✓ Del inventario" + (ex.ubicacion ? " · " + e(ex.ubicacion) : "") + " · se descuenta el stock" : clave(it.nombre) ? "＋ Se da de alta en el inventario, ya vendido" : ""}</div>
+        <div class="fila">
+          <div><label>Cantidad</label><input class="vdCampo" data-i="${i}" data-k="cantidad" type="number" inputmode="numeric" min="1" step="1" value="${e(it.cantidad)}"></div>
+          <div><label>Precio por unidad</label><input class="vdCampo" data-i="${i}" data-k="precio" type="number" inputmode="decimal" min="0" value="${e(it.precio)}"></div>
+        </div>
+        ${ex ? "" : `<label>Descripción (opcional)</label>
+        <textarea class="vdCampo" data-i="${i}" data-k="descripcion" rows="2" placeholder="Marca, talle, estado…">${e(it.descripcion)}</textarea>
+        <label>Categoría (opcional)</label>
+        <select class="vdCampo" data-i="${i}" data-k="categoriaId">${opcCat(it.categoriaId)}</select>
+        <div class="vd-fotos">
+          <button class="btn secundario btn-mini vdFoto" data-i="${i}" data-c="1"><span class="material-icons" style="font-size:16px;">photo_camera</span></button>
+          <button class="btn secundario btn-mini vdFoto" data-i="${i}" data-c="0"><span class="material-icons" style="font-size:16px;">image</span></button>
+          ${it.foto ? `<img class="thumb" src="${it.fotoUrl}"> <button class="btn secundario btn-mini vdSinFoto" data-i="${i}">✕</button>` : `<span class="texto-suave" style="font-size:12px;">Foto opcional</span>`}
+        </div>`}
+      </div>`;
+    }).join("")}
+    <button class="btn secundario" id="vdOtro"><span class="material-icons">add</span> Otro artículo</button>
+
+    <div class="fila">
+      <div><label>Moneda</label><select id="vdMoneda"><option value="UYU" ${vd.moneda === "UYU" ? "selected" : ""}>UYU</option><option value="USD" ${vd.moneda === "USD" ? "selected" : ""}>USD</option></select></div>
+      <div><label>Fecha</label><input id="vdFecha" type="date" value="${e(vd.fecha)}" max="${hoyISO()}"></div>
+    </div>
+    <p style="margin:10px 0 0;"><strong>Total: ${e(fmtMoneda(total, vd.moneda))}</strong></p>
+
+    <div class="seccion"><strong>Cobro</strong>
+      <label class="check"><input type="checkbox" id="vdPagoTodo" ${vd.pagoTodo ? "checked" : ""}> Pagó todo</label>
+      ${vd.pagoTodo ? "" : `<label>Cuánto pagó ahora (vacío o 0 = todavía nada)</label>
+        <input id="vdMonto" type="number" inputmode="decimal" min="0" value="${e(vd.cobro.monto)}">`}
+      <label>Método</label>
+      <select id="vdMetodo">${opcionesMetodo().replace('<option value="__nuevo">➕ Nuevo método…</option>', "").replace(`value="${e(vd.cobro.metodo)}"`, `value="${e(vd.cobro.metodo)}" selected`)}</select>
+      <input id="vdNota" placeholder="Detalle del cobro (opcional)" value="${e(vd.cobro.nota)}" style="margin-top:6px;">
+    </div>
+    <label class="check"><input type="checkbox" id="vdEntregada" ${vd.entregada ? "checked" : ""}> Ya se lo llevó (entregada)</label>
+    <button class="btn" id="vdGuardar" ${vd.guardando ? "disabled" : ""}><span class="material-icons">save</span> ${vd.guardando ? "Guardando…" : "Registrar la venta"}</button>
+    <input type="file" id="vdCamara" accept="image/*" capture="environment" style="display:none;">
+    <input type="file" id="vdGaleria" accept="image/*" style="display:none;">`;
+
+  const leerTodo = () => {
+    vd.comprador.nombre = box.querySelector("#vdNombre").value;
+    vd.comprador.telefono = box.querySelector("#vdTel").value;
+    box.querySelectorAll(".vdCampo").forEach((x) => { vd.items[Number(x.dataset.i)][x.dataset.k] = x.value; });
+    vd.moneda = box.querySelector("#vdMoneda").value;
+    vd.fecha = box.querySelector("#vdFecha").value || hoyISO();
+    vd.pagoTodo = box.querySelector("#vdPagoTodo").checked;
+    const m = box.querySelector("#vdMonto"); if (m) vd.cobro.monto = m.value;
+    vd.cobro.metodo = box.querySelector("#vdMetodo").value;
+    vd.cobro.nota = box.querySelector("#vdNota").value;
+    vd.entregada = box.querySelector("#vdEntregada").checked;
+  };
+  const repintar = () => { leerTodo(); pintarVD(); };
+  box.querySelector("#vdCerrar").onclick = cerrarVD;
+  box.querySelector("#vdOtro").onclick = () => { leerTodo(); vd.items.push(itemVacio()); pintarVD(); };
+  box.querySelectorAll(".vdQuitar").forEach((b) => b.onclick = () => { leerTodo(); vd.items.splice(Number(b.dataset.i), 1); pintarVD(); });
+  box.querySelectorAll(".vdSinFoto").forEach((b) => b.onclick = () => { leerTodo(); vd.items[Number(b.dataset.i)].foto = null; pintarVD(); });
+  // Elegir un artículo del inventario trae su precio y su moneda.
+  box.querySelectorAll('.vdCampo[data-k="nombre"]').forEach((x) => x.addEventListener("change", () => {
+    leerTodo();
+    const it = vd.items[Number(x.dataset.i)], ex = productoExistente(vdProductos, it);
+    if (ex && ex.precioSugerido != null && String(it.precio).trim() === "") { it.precio = String(ex.precioSugerido); if (ex.moneda) vd.moneda = ex.moneda; }
+    pintarVD();
+  }));
+  box.querySelectorAll('.vdCampo[data-k="precio"], .vdCampo[data-k="cantidad"], #vdMoneda, #vdPagoTodo, #vdNombre, #vdTel')
+    .forEach((x) => x.addEventListener("change", repintar));
+  // La foto se elige ahora y se SUBE al guardar: si no, cada foto que se
+  // mira y se descarta queda huérfana en Cloudinary, sin forma de borrarla.
+  box.querySelectorAll(".vdFoto").forEach((b) => b.onclick = () => {
+    leerTodo();
+    const inp = box.querySelector(b.dataset.c === "1" ? "#vdCamara" : "#vdGaleria");
+    inp.onchange = () => {
+      const f = inp.files && inp.files[0]; if (!f) return;
+      const it = vd.items[Number(b.dataset.i)];
+      it.foto = f; it.fotoUrl = URL.createObjectURL(f);
+      pintarVD();
+    };
+    inp.click();
+  });
+  box.querySelector("#vdGuardar").onclick = () => { leerTodo(); guardarVD(); };
+}
+
+async function guardarVD() {
+  if (!vd || vd.guardando) return;
+  const total = totalVD();
+  const fechaMs = vd.fecha === hoyISO() ? Date.now() : new Date(vd.fecha + "T12:00:00").getTime();
+  const r = armarVentaDirecta({
+    comprador: vd.comprador, moneda: vd.moneda, items: vd.items,
+    cobro: { monto: vd.pagoTodo ? total : vd.cobro.monto, metodo: vd.cobro.metodo, nota: vd.cobro.nota },
+    entregada: vd.entregada, fechaMs, vendedor: usuarioActual,
+    productos: vdProductos, compradores: vdCompradores.filter((c) => c.id)
+  });
+  if (r.errores) { toast(r.errores[0], "error"); return; }
+  vd.guardando = true; pintarVD();
+  try {
+    // 1) Las fotos de los artículos nuevos, ANTES del lote: si una no sube,
+    //    el artículo entra sin foto y se avisa; la venta no se traba.
+    let sinFoto = 0;
+    for (const pn of r.productosNuevos) {
+      const it = vd.items.filter((x) => x && (clave(x.nombre) || String(x.precio || "").trim()))[pn.indice];
+      if (it && it.foto) {
+        try { pn.datos.fotos = [await subirFoto(it.foto, "productos", 1600)]; }
+        catch (e) { console.error(e); sinFoto++; }
+      }
+    }
+    // 2) Todo junto. Sin la regla de `compradores` publicada, el lote entero
+    //    rebotaría: se reintenta sin el comprador (su nombre queda en la venta).
+    const escribir = async (conComprador) => {
+      const b = writeBatch(db);
+      const ahora = serverTimestamp();
+      if (conComprador && r.comprador && r.comprador.nuevo) {
+        const { creadoEnMs, ...c } = r.comprador.datos;
+        b.set(doc(db, "compradores", r.comprador.id), { ...c, creadoEn: ahora });
+      }
+      for (const pn of r.productosNuevos) {
+        const { creadoEnMs, ...p } = pn.datos;
+        b.set(doc(db, "productos", pn.id), { ...p, creadoEn: ahora, actualizadoEn: ahora });
+      }
+      for (const d of r.descuentos)
+        b.update(doc(db, "productos", d.id), { cantidad: d.cantidad, estado: d.estado, actualizadoEn: ahora });
+      const { fechaMs: fm, ...v } = r.venta.datos;
+      b.set(doc(db, "ventas", r.venta.id), { ...v, compradorId: conComprador ? v.compradorId : "", fecha: Timestamp.fromMillis(fm) });
+      await b.commit();
+      return { ...v, compradorId: conComprador ? v.compradorId : "", fecha: fm };
+    };
+    let guardada, sinComprador = false;
+    try { guardada = await escribir(true); }
+    catch (e) {
+      if (!(r.comprador && r.comprador.nuevo && String(e.code || "").includes("permission"))) throw e;
+      guardada = await escribir(false); sinComprador = true;
+    }
+    ventas.unshift({ id: r.venta.id, ...guardada });
+    kpis(); render();
+    cerrarVD();
+    toast("Venta registrada ✅" + (sinFoto ? " (una foto no subió: agregala desde Inventario)" : "")
+      + (sinComprador ? " (el comprador quedó sólo en la venta)" : ""), "ok");
+  } catch (e) {
+    console.error(e);
+    vd.guardando = false; pintarVD();
+    toast("No se pudo registrar la venta" + (String(e.code || "").includes("permission") ? ": tu usuario no puede validar ventas." : "."), "error");
+  }
 }
 
 async function mostrarDetalle(prodId, box) {

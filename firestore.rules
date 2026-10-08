@@ -1,6 +1,16 @@
 // =====================================================
-// remateTaller — Reglas de Firestore v1.0 (30-sep-2026)
+// remateTaller — Reglas de Firestore v1.1 (8-oct-2026)
 // Se pegan COMPLETAS en la consola. Nunca por fragmentos.
+//
+// Cambios respecto de la v1.0 (remate:V1, la venta directa):
+//  · Entra `compradores/{id}`: quien compró sin llave (en el depósito, por
+//    teléfono), dado de alta en el mismo formulario de la venta. Lo leen los
+//    activos (para elegirlo en la próxima) y lo escribe quien valida, que es
+//    quien crea la venta. El agente lo lee por el comodín, como ya lee el
+//    comprador adentro de cada venta.
+//  · Una venta DIRECTA (`origen: 'directa'`) deja corregir su comprador
+//    después: sólo `comprador` y `compradorId`, sólo quien valida. Los
+//    artículos y los totales siguen inmutables, como en todas.
 //
 // Cambios respecto de la v0.9:
 //  · Entra `avisos_contacto/{uid}`: los avisos de Claude por WhatsApp.
@@ -227,6 +237,22 @@ service cloud.firestore {
         && cambios().hasOnly(['pago', 'entrega'])
         && (!cambios().hasAny(['pago']) || puede('cobros'))
         && (!cambios().hasAny(['entrega']) || puede('entregas'));
+      // v1.1: el comprador de una venta directa se completa después.
+      allow update: if puede('validar')
+        && resource.data.get('origen', '') == 'directa'
+        && cambios().hasOnly(['comprador', 'compradorId']);
+      allow delete: if esAdmin();
+    }
+
+    // ---------- Compradores (v1.1) ----------
+    // Quien compró sin llave. Nombre y teléfono de una persona: lo ve el
+    // equipo, no el público.
+    match /compradores/{id} {
+      allow read: if activo();
+      allow create, update: if puede('validar')
+        && request.resource.data.nombre is string
+        && request.resource.data.nombre.size() > 0
+        && request.resource.data.nombre.size() <= 120;
       allow delete: if esAdmin();
     }
 
@@ -315,7 +341,7 @@ service cloud.firestore {
 
     // Sin catch-all: cualquier colección nueva entra con su bloque, en la
     // misma tanda que el código que la usa (§5.3). Las que ya están
-    // decididas y todavía no existen —`registrables`, `compradores`— van a
+    // decididas y todavía no existen —`registrables`— van a
     // entrar con su regla cuando entre su pantalla.
   }
 }

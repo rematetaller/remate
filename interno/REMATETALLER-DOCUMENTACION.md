@@ -387,7 +387,9 @@ pedidos/ped-{codigo} → { llaveCodigo, nombre, telefono,
                                   propuestaLote, subtotal, precioFinal (admin) }],
                          estado:'abierto'|'enviado'|'validado'|'descartado',
                          gestionadoPor, actualizadoEn }
-ventas/venta-ped-{codigo}
+compradores/{id}     → { nombre, telefono, nota, origen:'venta-directa', creadoPor, creadoEn }
+                       (v1.1) quien compró sin llave; lo da de alta la venta directa
+ventas/venta-ped-{codigo} · ventas/venta-dir-{id} (venta directa: + origen:'directa', compradorId)
                      → { fecha, llaveCodigo, comprador:{nombre,telefono},
                          vendedorUid, vendedorNombre,
                          items:[{ productoId, descripcion, cantidad, esLote,
@@ -568,7 +570,7 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | Archivo | v | Qué es |
 |---|---|---|
 | `index.html` | 1.0 | Puerta pública: valida la llave (por link o a mano) y avisa por WhatsApp si no sirve |
-| `firestore.rules` | **1.0** | Copia de las reglas de la consola: default deny sin catch-all, `usuarios` cerrado, `activo` exigido, permisos aplicados en el servidor, venta inmutable, bloque de `documentos`, —desde la tanda 25— `lucesRegistro`, el agente (v0.8), `reportes` (v0.9) y —desde la tanda 29— `avisos_contacto`. **Creado el 2026-09-07** copiando el texto real de la consola |
+| `firestore.rules` | **1.1** | Copia de las reglas de la consola: default deny sin catch-all, `usuarios` cerrado, `activo` exigido, permisos aplicados en el servidor, venta inmutable, bloque de `documentos`, —desde la tanda 25— `lucesRegistro`, el agente (v0.8), `reportes` (v0.9), —desde la tanda 29— `avisos_contacto` y —desde la tanda 33— `compradores` y el comprador corregible de una venta directa. **Creado el 2026-09-07** copiando el texto real de la consola |
 | `LUCES.md` | 1.0 | El puente a Tuya: por qué hay un servidor en un proyecto estático, quién puede encender, la puesta en marcha en cuatro pasos y qué mirar cuando no anda |
 | `.env.example` | 1.1 | Los **nombres** de las cinco variables de entorno del puente, que se cargan en el Netlify de Casa Verde. Nunca valores |
 | `netlify/functions/luces-remate.mjs` | 1.0 | El puente servido por Netlify (tanda 31): traduce `event` al `req`/`res` de `api/tuya.mjs` y la respuesta de vuelta. Sin lógica. **Viaja en el zip de Casa Verde** con `api/tuya.mjs` y `api/_sesion.mjs`, con las mismas rutas. `vercel.json` se retiró en la misma tanda |
@@ -578,7 +580,7 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | `api/tuya.mjs` | 1.1 | La única función de servidor. Verifica la firma RS256 del token de Firebase, lee `usuarios/{uid}` **con ese mismo token** (sin credencial de servidor), y recién ahí firma contra Tuya. Lista blanca de luces y de orígenes, freno por aparato |
 | `pruebas/luces.mjs` | 1.1 | Banco de pruebas del puente: 28 casos (4 por el adaptador de Netlify) con la nube de Tuya, Firestore y las claves de Google simuladas. Firma tokens de verdad con un par de claves propio, así que la verificación que prueba es la real. `node pruebas/luces.mjs`, sin npm |
 | `comprador.html` | 2.3 | Catálogo (nombre + descripción, fotos ampliables), guía "¿Cómo comprar?", carrito, lote, propuesta, envío |
-| `interno/utils.js` | **1.19** | Núcleo: Firebase (SDK diferido), auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app / reportar / mis avisos por WhatsApp**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, teléfonos, **`PUENTE_LUCES` + `lucesEstado()` / `lucesMandar()`**, **`identificarFoto()`**, helpers |
+| `interno/utils.js` | **1.21** | Núcleo: Firebase (SDK diferido), auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app / reportar / mis avisos por WhatsApp**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, teléfonos, **`PUENTE_LUCES` + `lucesEstado()` / `lucesMandar()`**, **`identificarFoto()`**, helpers |
 | `interno/design-system.css` | **1.1** | Estilos mobile-first |
 | `interno/documentos.html` | — | Libretas de propiedad: alta, listado y consulta. Exige el permiso `documentos`. **Faltaba en este inventario** hasta el 2026-09-07 |
 | `interno/diagnostico.html` | **2.2** | Prueba las conexiones reales del panel y **que las reglas estén publicadas**. Sin ítem en la barra y **sin depender del núcleo**: se abre escribiendo la dirección y carga aunque `utils.js` esté roto |
@@ -589,7 +591,8 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | `interno/inventario.html` | 1.5 | Form desplegable, nombre + descripción, tarjetas colapsadas con Editar / Historial / Eliminar, borrado de categorías vacías, ayuda |
 | `interno/llaves.html` | 1.2 | Crear y compartir llaves + historial de compras por comprador + ayuda |
 | `interno/pedidos.html` | 1.2 | Revisar / editar / validar / descartar; al validar inicializa `pago` y `entrega` sin pisar lo existente; ayuda |
-| `interno/ventas.html` | 2.2 | Post-venta completo: pagos parciales, `metodosPago`, entrega con historial, detalle de artículo, filtros, KPI Por cobrar, ayuda |
+| `interno/ventas.html` | 2.3 | Post-venta completo: pagos parciales, `metodosPago`, entrega con historial, detalle de artículo, filtros, KPI Por cobrar, ayuda, y —desde la tanda 33— **＋ Venta directa** |
+| `interno/venta-directa.js` | 1.0 | Arma una venta directa (comprador, artículos nuevos o descontados, venta y cobro) sin tocar Firebase; lo escribe `ventas.html` en un lote. Banco: `pruebas/venta-directa.mjs` |
 | `interno/luces.html` | 1.0 | Las luces del depósito: estado real de cada una, encender y apagar, y los últimos veinte movimientos con quién y cuándo. Exige el permiso `luces` |
 | `interno/configuracion.html` | 1.2 | Contacto y textos públicos + gestión de usuarios + ayuda |
 | `interno/manifest.webmanifest` | 1.0 | PWA del panel: nombre, `start_url` `index.html`, `display: standalone`, colores `#f4f4f2` / `#b45309`, tres iconos (192, 512, maskable 512) |
@@ -1103,6 +1106,42 @@ el sistema por andando.
 >
 > **La lección, que vale más que las siete entradas:** un registro no se detiene con un
 > aviso. Se detiene en silencio, y lo que se rompe después no parece tener nada que ver.
+
+---
+
+## v0.5.25 — La venta directa (Tanda 33 · 8-oct-2026)
+
+> **Entrega:** `interno/ventas.html` **v2.3** (botón «＋ Venta directa»),
+> `interno/venta-directa.js` **v1.0** (nuevo, sin Firebase), `interno/utils.js` **v1.21**
+> (`writeBatch`, `Timestamp`), `firestore.rules` **v1.1** (`compradores`, y el comprador
+> de una venta directa se corrige después) y `pruebas/venta-directa.mjs` (26 casos).
+> **Las reglas v1.1 las publica Mauro**; hasta entonces la venta entra igual y el
+> comprador queda sólo adentro de la venta.
+
+**Qué pasó:** Mauro (remate:V1): «falta el ingreso por una venta directa… si se quiere
+registrar la venta de un casco, y el casco no estaba dado de alta, y el cliente no estaba
+registrado, llenando los datos en un mismo formulario ya se da de alta al cliente, el
+artículo y la venta con su cobro… sin trabar el registro, para luego editar si es
+necesario». Además alimenta los ingresos de Tiempos (tiempos:V9).
+
+**Cómo quedó:**
+- **Lo único obligatorio es qué se vendió y a cuánto** (precio por unidad). Comprador,
+  foto, categoría, descripción y cobro se dejan para después.
+- **Un artículo nuevo nace vendido**: `cantidad: 0`, `estado: 'agotado'`, con el precio de
+  la venta como `precioSugerido`, `origen: 'venta-directa'`. Con stock cero no aparece en
+  el catálogo público. **Uno que ya estaba** (mismo nombre, sin mayúsculas ni tildes) no
+  se duplica: se descuenta el stock como al validar un pedido, y nunca baja de cero.
+- **El comprador** que ya estaba (mismo nombre o teléfono) se usa; uno nuevo entra a
+  `compradores/`. Sin nombre, la venta dice «Venta directa» y se corrige después con el
+  botón «Comprador» (sólo en las directas: la regla deja cambiar `comprador` y
+  `compradorId` y nada más).
+- **Todo va en UN lote** (`writeBatch`): o entran comprador, artículos, venta y cobro, o
+  no entra nada. Si la regla de `compradores` todavía no está publicada, el lote se
+  reintenta sin el comprador: la venta no se traba por eso.
+- **La venta tiene la forma de siempre** (§4) más `origen: 'directa'` y `compradorId`, y
+  su id es `venta-dir-<…>`: el post-venta, los KPI y el historial la leen sin cambios.
+- **La foto se sube al guardar**, nunca al elegirla (si no sube, el artículo entra sin
+  foto y se avisa). Cámara y archivos son dos inputs, como en el inventario.
 
 ---
 

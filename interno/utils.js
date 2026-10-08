@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.20)
+// utils.js — Núcleo compartido de remateTaller (v1.21)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 //
@@ -12,6 +12,12 @@
 // y mientras tanto el inventario derivó y las reglas quedaron dos
 // versiones atrás sin que nada avisara. Si volvés a anotar un cambio
 // acá, anotalo también allá, en la misma tanda.
+//
+// v1.21 (tanda 33, 8-oct-2026):
+//  · LA VENTA DIRECTA (remate:V1). Exporta `writeBatch` y `Timestamp`:
+//    `ventas.html` escribe comprador, artículos, venta y cobro en UN lote
+//    —o entra todo o nada— y la fecha elegida como Timestamp, que es lo que
+//    ordena `ventas` (un número mezclado con Timestamps se ordenaría aparte).
 //
 // v1.20 (tanda 32, 3-oct-2026):
 //  · CONSULTA EN VIVO. Después de guardar un reporte, `avisarClaude()`
@@ -198,7 +204,7 @@ export let app, auth, db;
 export let doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
            collection, getDocs, query, where, orderBy, limit,
            serverTimestamp, onSnapshot, getCountFromServer,
-           terminate, clearIndexedDbPersistence;
+           terminate, clearIndexedDbPersistence, writeBatch, Timestamp;
 export let onAuthStateChanged, signInWithEmailAndPassword, signOut,
            createUserWithEmailAndPassword, sendPasswordResetEmail;
 
@@ -248,7 +254,7 @@ export function cargarFirebase() {
     ({ doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
        collection, getDocs, query, where, orderBy, limit,
        serverTimestamp, onSnapshot, getCountFromServer,
-       terminate, clearIndexedDbPersistence } = modFs);
+       terminate, clearIndexedDbPersistence, writeBatch, Timestamp } = modFs);
 
     app = _initializeApp(firebaseConfig);
     auth = _getAuth(app);

@@ -101,7 +101,7 @@ siguen pendientes, y si algún día entran, sus variables se agregan a esta tabl
 | Clave de Gemini (la IA del inventario) | Identifica la foto, busca su ficha y sugiere un precio en Uruguay | secreto de infraestructura | **No está en este proyecto**: es `GEMINI_API_KEY` de Casa Verde, en su Netlify. Remate llama a `claude-proxy` sin credenciales | `interno/identificar.js` | 2026-09-30 |
 | `PUENTE_LUCES` | La dirección de la función. **No es un secreto** —sin un token de Firebase válido no hace nada— y por eso vive en el código, no en el entorno | público por diseño | `interno/utils.js`: `…netlify.app/.netlify/functions/luces-remate` | `luces.html` vía `utils.js` | `utils.js` v1.19, 2026-10-01 |
 | Credencial de servidor de Firebase (*service account*) | Le permitiría a la función leer toda la base | **ausente por diseño** | No existe. La función lee `usuarios/{uid}` con el token de la propia persona, así que no puede leer nada que ella no pudiera leer. Un service account sería una llave maestra de ventas, documentos y llaves para prender una luz | Nadie | ausencia confirmada en todo el repo, 2026-09-09 |
-| Reglas de Firestore | Autoridad real de acceso | configuración de seguridad (copia en repo, autoridad en consola) | La autoridad sigue siendo lo publicado en la **consola de Firebase**. La copia vive en `/firestore.rules` (raíz), **v1.0** (2026-09-30, entra `avisos_contacto`; la v0.9 es la publicada hasta que Mauro pegue ésta) | Firestore | **v0.9 publicada por Mauro el 2026-09-13** (`remate:L6` en el panel). Verificado desde una sesión lo que se puede verificar: el agente entra y `reportes/` contesta. Que lo publicado sea exactamente la v0.9 sólo lo confirma él — el acceso del agente acá es un comodín con exclusiones, así que leer una colección no distingue una versión de otra |
+| Reglas de Firestore | Autoridad real de acceso | configuración de seguridad (copia en repo, autoridad en consola) | La autoridad sigue siendo lo publicado en la **consola de Firebase**. La copia vive en `/firestore.rules` (raíz), **v1.1** (2026-10-08, entra `compradores` y el comprador corregible de una venta directa; v1.0 sumó `avisos_contacto`. La v0.9 es la publicada hasta que Mauro pegue ésta) | Firestore | **v0.9 publicada por Mauro el 2026-09-13** (`remate:L6` en el panel). Verificado desde una sesión lo que se puede verificar: el agente entra y `reportes/` contesta. Que lo publicado sea exactamente la v0.9 sólo lo confirma él — el acceso del agente acá es un comodín con exclusiones, así que leer una colección no distingue una versión de otra |
 | `avisos_contacto/{uid}` | Número y clave de CallMeBot de cada persona, y si quiere que Claude le escriba (`agente`). Una clave de CallMeBot sólo sirve para mandarle mensajes a ese número | dato en runtime | Firestore. Lo carga cada uno en la hoja de cuenta → «Mis avisos por WhatsApp»; lo lee su dueño, y el agente de a uno | `utils.js` (`mostrarAvisos`), `datos/herramientas/avisos.mjs` | reglas v1.0, 2026-09-30 |
 | Usuario del agente de Claude Code | Deja que un chat LEA la base para compararla con el código publicado. No escribe, y no lee `llaves` ni `documentos`. De `avisos_contacto` trae UNA persona por vez, para mandarle un aviso por WhatsApp si ella lo encendió (v1.0) | dato en runtime | Firebase Authentication de `remate-acbc9`. La contraseña vive en las variables de entorno de Claude Code, cargadas por Mauro. **No tiene ficha en `usuarios/`**: su acceso sale del bloque `esAgente()` de las reglas, y de ningún otro lado | `datos/herramientas/firestore.mjs`, proyecto `remate` | UID verificado contra la base, 2026-09-11 |
 
@@ -230,9 +230,18 @@ verdad después del cambio.
   *ese mismo token* y recién ahí firma contra Tuya. Nada de credenciales del
   lado del cliente, y nada de credenciales de servidor de Firebase del lado del
   puente. Ver `LUCES.md`.
-- **Antes de subir se corren `node pruebas/luces.mjs`** (28 casos, 4 por el adaptador de Netlify) **y `node
-  pruebas/identificar.mjs`** (13 casos), los dos sin npm ni red, y se comprueba
-  que parsee el JavaScript que vive adentro de los `.html`.
+- **Antes de subir se corren `node pruebas/luces.mjs`** (28 casos, 4 por el adaptador de Netlify), **`node
+  pruebas/identificar.mjs`** (13 casos) **y `node pruebas/venta-directa.mjs`**
+  (26 casos), los tres sin npm ni red, y se comprueba que parsee el
+  JavaScript que vive adentro de los `.html`.
+- **La venta directa** (tanda 33, `remate:V1`): «＋ Venta directa» en Ventas da
+  de alta comprador, artículo, venta y cobro en un solo formulario y en UN lote.
+  **Lo único obligatorio es qué se vendió y a cuánto**: lo demás no traba la
+  venta. Un artículo nuevo nace vendido (stock 0, no sale en el catálogo); uno
+  que ya estaba se descuenta. La lógica vive en `interno/venta-directa.js`, que
+  no toca Firebase; la venta tiene la MISMA forma que la de un pedido, más
+  `origen: 'directa'`. Si cambia esa forma (§4), cambia ese archivo en la
+  misma tanda.
 - **Lo que trae Gemini es una PROPUESTA** (tanda 30): título, descripción,
   categoría y un **precio sugerido en Uruguay** para esa pieza, **como nueva**
   —lo son casi todas; si la foto muestra uso, lo dice—, con su rango y su base. No escribe en la base: llena los campos vacíos del
