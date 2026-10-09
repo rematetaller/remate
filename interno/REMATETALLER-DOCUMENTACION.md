@@ -570,7 +570,7 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | Archivo | v | Qué es |
 |---|---|---|
 | `index.html` | 1.0 | Puerta pública: valida la llave (por link o a mano) y avisa por WhatsApp si no sirve |
-| `firestore.rules` | **1.1** | Copia de las reglas de la consola: default deny sin catch-all, `usuarios` cerrado, `activo` exigido, permisos aplicados en el servidor, venta inmutable, bloque de `documentos`, —desde la tanda 25— `lucesRegistro`, el agente (v0.8), `reportes` (v0.9), —desde la tanda 29— `avisos_contacto` y —desde la tanda 33— `compradores` y el comprador corregible de una venta directa. **Creado el 2026-09-07** copiando el texto real de la consola |
+| `firestore.rules` | **1.2** | Copia de las reglas de la consola: default deny sin catch-all, `usuarios` cerrado, `activo` exigido, permisos aplicados en el servidor, venta inmutable, bloque de `documentos`, —desde la tanda 25— `lucesRegistro`, el agente (v0.8), `reportes` (v0.9), —desde la tanda 29— `avisos_contacto` y —desde la tanda 33— `compradores` y el comprador corregible de una venta directa. **Creado el 2026-09-07** copiando el texto real de la consola |
 | `LUCES.md` | 1.0 | El puente a Tuya: por qué hay un servidor en un proyecto estático, quién puede encender, la puesta en marcha en cuatro pasos y qué mirar cuando no anda |
 | `.env.example` | 1.1 | Los **nombres** de las cinco variables de entorno del puente, que se cargan en el Netlify de Casa Verde. Nunca valores |
 | `netlify/functions/luces-remate.mjs` | 1.0 | El puente servido por Netlify (tanda 31): traduce `event` al `req`/`res` de `api/tuya.mjs` y la respuesta de vuelta. Sin lógica. **Viaja en el zip de Casa Verde** con `api/tuya.mjs` y `api/_sesion.mjs`, con las mismas rutas. `vercel.json` se retiró en la misma tanda |
@@ -580,7 +580,7 @@ desactualizado es peor que no tenerlo: da por existente lo que no está.
 | `api/tuya.mjs` | 1.1 | La única función de servidor. Verifica la firma RS256 del token de Firebase, lee `usuarios/{uid}` **con ese mismo token** (sin credencial de servidor), y recién ahí firma contra Tuya. Lista blanca de luces y de orígenes, freno por aparato |
 | `pruebas/luces.mjs` | 1.1 | Banco de pruebas del puente: 28 casos (4 por el adaptador de Netlify) con la nube de Tuya, Firestore y las claves de Google simuladas. Firma tokens de verdad con un par de claves propio, así que la verificación que prueba es la real. `node pruebas/luces.mjs`, sin npm |
 | `comprador.html` | 2.3 | Catálogo (nombre + descripción, fotos ampliables), guía "¿Cómo comprar?", carrito, lote, propuesta, envío |
-| `interno/utils.js` | **1.21** | Núcleo: Firebase (SDK diferido), auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app / reportar / mis avisos por WhatsApp**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, teléfonos, **`PUENTE_LUCES` + `lucesEstado()` / `lucesMandar()`**, **`identificarFoto()`**, helpers |
+| `interno/utils.js` | **1.22** | Núcleo: Firebase (SDK diferido), auth (sin autoprovisión), **hoja de cuenta / salida limpia / reparar app / reportar / mis avisos por WhatsApp**, nav, `validarLlave`, `subirFoto`, ayuda, visor `mostrarFoto`, `escapar`, teléfonos, **`PUENTE_LUCES` + `lucesEstado()` / `lucesMandar()`**, **`identificarFoto()`**, helpers |
 | `interno/design-system.css` | **1.1** | Estilos mobile-first |
 | `interno/documentos.html` | — | Libretas de propiedad: alta, listado y consulta. Exige el permiso `documentos`. **Faltaba en este inventario** hasta el 2026-09-07 |
 | `interno/diagnostico.html` | **2.2** | Prueba las conexiones reales del panel y **que las reglas estén publicadas**. Sin ítem en la barra y **sin depender del núcleo**: se abre escribiendo la dirección y carga aunque `utils.js` esté roto |
@@ -1106,6 +1106,20 @@ el sistema por andando.
 >
 > **La lección, que vale más que las siete entradas:** un registro no se detiene con un
 > aviso. Se detiene en silencio, y lo que se rompe después no parece tener nada que ver.
+
+---
+
+## v0.5.26 — El buzón de avisos y la Pizarra (Tanda 34 · 9-oct-2026)
+
+> **Entrega:** `firestore.rules` **v1.2** (`avisos/`), `interno/utils.js` **v1.22**
+> («Mis avisos» lleva a la guía de la Pizarra). **Las reglas las publica Mauro.**
+
+**Qué pasó:** Mauro (tiempos:V10): «Pizarra para todos por igual, para que cada quien
+tenga la opción de instalar los avisos en su teléfono directamente». Lo que Claude le
+avisa a una persona queda en `avisos/` de su base, y la Pizarra —la app de Android del
+ecosistema— lo trae y lo muestra. Mauro y Florencia lo reciben en el buzón de Tiempos;
+el de acá es para quien entre a remate sin ser de la familia. La guía de instalación vive
+en `datos` (`pizarra.html`): el APK no viene de Play Store y el teléfono advierte.
 
 ---
 

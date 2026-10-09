@@ -175,7 +175,7 @@ await prueba("lo que escribió alguien se escapa antes de ir a la pantalla", () 
   assert.match(html, /escapar\(\(v\.comprador && v\.comprador\.nombre\) \|\| "—"\)/);
 });
 await prueba("reglas v1.1: compradores con su bloque, y de una venta directa sólo cambia el comprador", () => {
-  assert.match(reglas, /Reglas de Firestore v1\.1/);
+  assert.match(reglas, /Cambios respecto de la v1\.0 \(remate:V1, la venta directa\)/);
   const c = /match \/compradores\/\{id\} \{([\s\S]*?)\n    \}/.exec(reglas)[1];
   assert.match(c, /allow read: if activo\(\);/);
   assert.match(c, /allow create, update: if puede\('validar'\)/);

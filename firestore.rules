@@ -1,6 +1,13 @@
 // =====================================================
-// remateTaller — Reglas de Firestore v1.1 (8-oct-2026)
+// remateTaller — Reglas de Firestore v1.2 (9-oct-2026)
 // Se pegan COMPLETAS en la consola. Nunca por fragmentos.
+//
+// Cambios respecto de la v1.1 (tiempos:V10, el buzón de avisos):
+//  · Entra `avisos/{id}`: lo que Claude le avisa a una persona, que su
+//    Pizarra (la app de Android del ecosistema, ahora para todos) trae como
+//    notificación. Lo lee, lo marca leído o lo borra SÓLO su dueño; lo crea
+//    SÓLO el agente, con la forma fija. Es la primera escritura del agente
+//    en esta base, y no toca nada que ya exista.
 //
 // Cambios respecto de la v1.0 (remate:V1, la venta directa):
 //  · Entra `compradores/{id}`: quien compró sin llave (en el depósito, por
@@ -337,6 +344,19 @@ service cloud.firestore {
              ['telefono', 'apikey', 'nombre', 'agente', 'actualizadoEn', 'agenteEn'])
         && (!('agente' in request.resource.data) || request.resource.data.agente is bool);
       allow delete: if activo() && request.auth.uid == uid;
+    }
+
+    // ---------- Avisos de Claude (v1.2) ----------
+    // El buzón de cada persona. Hoy Mauro y Florencia los reciben en el de
+    // Tiempos; éste es para quien entre a remate y no sea de la familia.
+    match /avisos/{id} {
+      allow read, delete: if activo() && resource.data.uid == request.auth.uid;
+      allow update: if activo() && resource.data.uid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leido']);
+      allow create: if esAgente()
+        && request.resource.data.keys().hasOnly(['uid', 'sitio', 'tema', 'texto', 'creadoEn', 'leido'])
+        && request.resource.data.texto is string
+        && request.resource.data.texto.size() <= 600;
     }
 
     // Sin catch-all: cualquier colección nueva entra con su bloque, en la

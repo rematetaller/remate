@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.21)
+// utils.js — Núcleo compartido de remateTaller (v1.22)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 //
@@ -12,6 +12,11 @@
 // y mientras tanto el inventario derivó y las reglas quedaron dos
 // versiones atrás sin que nada avisara. Si volvés a anotar un cambio
 // acá, anotalo también allá, en la misma tanda.
+//
+// v1.22 (tanda 34, 9-oct-2026):
+//  · «Mis avisos» lleva a la guía de la Pizarra, la app de Android que
+//    muestra los avisos de Claude como notificación (tiempos:V10). El buzón
+//    es `avisos/`, reglas v1.2.
 //
 // v1.21 (tanda 33, 8-oct-2026):
 //  · LA VENTA DIRECTA (remate:V1). Exporta `writeBatch` y `Timestamp`:
@@ -1029,6 +1034,10 @@ function asegurarHojaAvisos() {
         'por WhatsApp cuando aparezca algo que te toca: una falla que reportaste quedó ' +
         'arreglada, o hace falta que contestes algo. Como mucho tres por día, y sin ' +
         'datos sensibles en el texto.</div>' +
+      '<div class="rt-nota">📲 <b>O en el teléfono, sin WhatsApp:</b> la Pizarra, la app ' +
+        'del equipo para Android, te muestra los avisos de Claude como notificación. No ' +
+        'viene de Play Store y el teléfono va a advertir: <a href="https://maurogasta-crypto.github.io/datos/pizarra.html" target="_blank" ' +
+        'rel="noopener">leé cómo se instala antes de bajarla</a>.</div>' +
       '<label class="rt-etq">¿Querés que Claude te escriba?</label>' +
       '<div class="rt-seg" id="rtAvAgente">' +
         '<button type="button" data-v="no" class="activo">No</button>' +
