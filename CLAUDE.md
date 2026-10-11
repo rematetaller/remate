@@ -180,6 +180,11 @@ verdad después del cambio.
 > se vuelve a preguntar en esa sesión. Está en `PROTOCOLO-GENERAL.md` § 6.0.
 
 - **Archivos completos, nunca diffs** (doc § 3.1).
+- **Toda contraseña tiene su ojo 👁 para verla mientras se tipea** (v1.23,
+  11-oct-2026, Mauro: «en todos los sitios»): `ojosEnClaves()` al final de
+  `utils.js`. Es el mismo código en Tiempos, Casa Verde, CasaYourte y el panel,
+  y en la Pizarra va en Kotlin: si cambia en uno, cambia en todos en la misma
+  tanda.
 - **El núcleo es `interno/utils.js` y no se duplica** (§ 3.2). Si una función se
   necesita en dos páginas, sube ahí en la misma tanda. **Y es el único que
   toca el SDK de Firebase**: ninguna página importa de `gstatic.com`. Hasta la

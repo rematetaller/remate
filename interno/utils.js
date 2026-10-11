@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.22)
+// utils.js — Núcleo compartido de remateTaller (v1.23)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 //
@@ -12,6 +12,10 @@
 // y mientras tanto el inventario derivó y las reglas quedaron dos
 // versiones atrás sin que nada avisara. Si volvés a anotar un cambio
 // acá, anotalo también allá, en la misma tanda.
+//
+// v1.23 (tanda 35, 11-oct-2026):
+//  · El ojo 👁 en cada contraseña, para verla mientras se tipea
+//    (`ojosEnClaves`, al final; el mismo código en los cinco sitios).
 //
 // v1.22 (tanda 34, 9-oct-2026):
 //  · «Mis avisos» lleva a la guía de la Pizarra, la app de Android que
@@ -1689,3 +1693,50 @@ export async function identificarFoto(file, { categorias = [], pista = "" } = {}
   catch (e) { return { ok: false, motivo: "No se pudo cargar la búsqueda. Recargá la página o cargalo a mano." }; }
   return modulo.pedirIdentificacion({ imagen, mime: blob.type, categorias, pista });
 }
+
+// ── v1.23 ──
+/* El ojo de las contraseñas (11-oct-2026). Mauro: «un ojo para poder ver la
+   contraseña cuando se tipea, en todos los sitios». Pone un botón 👁 adentro de
+   cada campo de contraseña de la página —también de los que aparecen después,
+   por eso el MutationObserver— que alterna entre ver y ocultar. Corre solo al
+   cargar este archivo: ninguna página tiene que acordarse de llamarlo.
+   Es el MISMO código en Tiempos, Casa Verde, CasaYourte, remate y el panel:
+   si cambia en uno, cambia en los cinco en la misma tanda.
+   Los estilos van en línea a propósito: así no depende de la hoja de cada
+   sitio, y le gana a las reglas generales de «button» (ancho, fondo, borde). */
+function ojosEnClaves(raiz) {
+  raiz = raiz || document;
+  const poner = (inp) => {
+    if (inp.dataset.ojo) return;
+    inp.dataset.ojo = "1";
+    // La caja ocupa el renglón y el campo la llena: en un teléfono los campos
+    // de entrada van a lo ancho, y con una caja «en línea» el de la
+    // contraseña quedaba más angosto que el del mail.
+    const caja = document.createElement("span");
+    caja.style.cssText = "position:relative;display:block";
+    inp.parentNode.insertBefore(caja, inp);
+    caja.appendChild(inp);
+    inp.style.width = "100%";
+    inp.style.boxSizing = "border-box";
+    inp.style.paddingRight = "2.6em";
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ojo-clave";
+    b.style.cssText = "position:absolute;right:.25em;top:50%;transform:translateY(-50%);"
+      + "background:none;border:0;box-shadow:none;padding:.2em .35em;margin:0;width:auto;"
+      + "min-width:0;height:auto;cursor:pointer;font-size:1.1em;line-height:1;color:inherit;opacity:.75";
+    const pintar = () => {
+      const viendo = inp.type === "text";
+      b.textContent = viendo ? "🙈" : "👁";
+      b.setAttribute("aria-label", viendo ? "Ocultar la contraseña" : "Mostrar la contraseña");
+      b.title = b.getAttribute("aria-label");
+    };
+    b.onclick = () => { inp.type = inp.type === "password" ? "text" : "password"; pintar(); inp.focus(); };
+    pintar();
+    caja.appendChild(b);
+  };
+  const todos = () => raiz.querySelectorAll('input[type="password"]:not([data-ojo])').forEach(poner);
+  todos();
+  new MutationObserver(todos).observe(raiz.body || raiz, { childList: true, subtree: true });
+}
+if (typeof document !== "undefined" && typeof MutationObserver !== "undefined") ojosEnClaves();

@@ -1109,6 +1109,18 @@ el sistema por andando.
 
 ---
 
+## v0.5.27 — El ojo de la contraseña (Tanda 35 · 11-oct-2026)
+
+> **Entrega:** `interno/utils.js` **v1.23**. Sin reglas nuevas.
+
+**Qué pasó:** Mauro: «un ojo para poder ver la contraseña cuando se tipea, en todos los
+sitios». `ojosEnClaves()` pone un botón 👁 adentro de cada campo de contraseña —el de
+`login.html` y los que aparezcan después— que alterna entre ver y ocultar. Corre solo al
+cargar el núcleo. Es el mismo código en Tiempos, Casa Verde, CasaYourte y el panel: si
+cambia acá, cambia allá en la misma tanda.
+
+---
+
 ## v0.5.26 — El buzón de avisos y la Pizarra (Tanda 34 · 9-oct-2026)
 
 > **Entrega:** `firestore.rules` **v1.2** (`avisos/`), `interno/utils.js` **v1.22**
