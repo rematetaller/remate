@@ -53,6 +53,16 @@ ficha: `activo == true`, y `rol == 'admin'` o `permisos.luces == true`.
 > ventas, documentos, llaves de compradores — para prender una luz. Así como
 > está, el puente no puede leer nada que la propia persona no pudiera leer.
 
+**Desde el 13-oct-2026 las prende también el widget de la Pizarra** (la app
+de Android del ecosistema, `maurogasta-crypto/pizarra`, `Luces.kt`): dos
+botones, «Entrada» y «Depósito». Entra con la cuenta de remate de la persona
+—una segunda sesión de la app, sólo para esto— y pasa por esta misma puerta:
+token, ficha y permiso. Como una app no tiene origen, manda el del panel
+(`https://rematetaller.github.io`); `ORIGENES_PERMITIDOS` protege la sesión de
+quien navega, y lo que abre la luz sigue siendo el token. Cada toque queda en
+`lucesRegistro`, firmado, como desde `luces.html`. **Si cambian los alias de
+`TUYA_LUCES` (`entrada`, `deposito`), cambia `LUCES_WIDGET` de la Pizarra.**
+
 Y sigue valiendo la regla de siempre: **esconder el botón no protege nada.** La
 pantalla oculta la sección a quien no tiene el permiso, pero el que dice que no
 es el servidor.
