@@ -320,7 +320,7 @@ QUÉ ESTAMOS», el panel las muestra arriba de todo y en la pestaña de cada sit
 acá, con el nombre de la línea y de quién la tiene. El reglamento completo está
 en `protocolos/PROTOCOLO-GENERAL.md` § 2.1 quinquies del repo `datos`.
 
-**Y esa misma ronda corre sola una vez por día**, como una *routine* de Claude
+**Y esa misma ronda corre sola una vez por día (en temporada, tres: 7:47, 13:47 y 19:47; la de la mañana es la completa)**, como una *routine* de Claude
 Code: gasta de la suscripción y no cuesta aparte, lee y escribe en el panel, y
 **no toca código**. El porqué de esas dos decisiones está en
 `RUTINA-AUTOMATICA.md` del repo `datos`.
