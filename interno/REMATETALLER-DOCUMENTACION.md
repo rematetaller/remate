@@ -1109,6 +1109,18 @@ el sistema por andando.
 
 ---
 
+## v0.5.28 — El ojo, una sola copia para los cinco sitios (Tanda 36 · 29-oct-2026)
+
+> **Entrega:** `interno/utils.js` **v1.24**. Sin reglas nuevas.
+
+**Qué pasó:** primer paso del módulo común (`general:C7`, aprobado por Mauro el 29-oct).
+`ojosEnClaves()` era la misma copia en cinco sitios; desde esta tanda vive en `ojos.js`
+del panel (`maurogasta-crypto/datos`) y `utils.js` lo pide con `import()` diferido y con
+`catch`. Si no baja, `login.html` anda igual, sin ojo. Cambiarlo es cambiar ese archivo;
+su banco es `node pruebas/ojos.mjs` de `datos`.
+
+---
+
 ## v0.5.27 — El ojo de la contraseña (Tanda 35 · 11-oct-2026)
 
 > **Entrega:** `interno/utils.js` **v1.23**. Sin reglas nuevas.
