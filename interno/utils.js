@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.25)
+// utils.js — Núcleo compartido de remateTaller (v1.26)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 //
@@ -12,6 +12,10 @@
 // y mientras tanto el inventario derivó y las reglas quedaron dos
 // versiones atrás sin que nada avisara. Si volvés a anotar un cambio
 // acá, anotalo también allá, en la misma tanda.
+//
+// v1.26 (29-oct-2026, general:C7):
+//  · `explicarError`: los errores con palabras, de `errores.js` del panel. La
+//    pantalla «No pudimos verificar tu cuenta» mostraba el código pelado.
 //
 // v1.25 (29-oct-2026, general:C7):
 //  · Leer la respuesta de CallMeBot deja de ser una copia: `leerRespuestaWa`
@@ -478,7 +482,7 @@ export async function verificarAuth(callback) {
         "No pudimos verificar tu cuenta.",
         "Puede ser un problema de conexión, o de permisos en la base. " +
         "El detalle está en la consola del navegador.",
-        (e && e.code) ? e.code : ""
+        explicarError(e)
       );
     }
   });
@@ -1022,6 +1026,14 @@ async function avisarClaude(reporteId) {
    Se pide recién al usarla, diferida y con catch: si no baja, se dice que no
    se pudo leer —nunca un «salió bien» inventado—. Banco: `node
    pruebas/callmebot.mjs` de `datos`. */
+/* PROTOCOLO-INTERFAZ § 7.2: un error muestra la causa, no el código. Desde
+   v1.26 (29-oct-2026, `general:C7`) las palabras salen de `errores.js` del
+   panel (`maurogasta-crypto/datos`), la tabla ÚNICA del ecosistema. Se pide al
+   cargar, diferida y con catch: si no bajó, se ve el código como antes. */
+let _errores = null;
+import("https://maurogasta-crypto.github.io/datos/errores.js").then((m) => { _errores = m; }).catch(() => {});
+export const explicarError = (e) => (_errores ? _errores.explicar(e) : ((e && e.code) || ""));
+
 export async function leerRespuestaWa(txt) {
   try { return (await import("https://maurogasta-crypto.github.io/datos/callmebot.js")).leerRespuestaWa(txt); }
   catch (e) { return { ok: false, motivo: "sin_leer", detalle: "No pude leer la respuesta de CallMeBot: fijate si te llegó el WhatsApp." }; }
