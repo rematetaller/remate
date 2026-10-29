@@ -1,5 +1,5 @@
 // =====================================================
-// utils.js — Núcleo compartido de remateTaller (v1.24)
+// utils.js — Núcleo compartido de remateTaller (v1.25)
 // Toda página (interna y pública) importa desde acá.
 // Stack: Firebase v10 modular (ESM por CDN), vanilla JS.
 //
@@ -12,6 +12,10 @@
 // y mientras tanto el inventario derivó y las reglas quedaron dos
 // versiones atrás sin que nada avisara. Si volvés a anotar un cambio
 // acá, anotalo también allá, en la misma tanda.
+//
+// v1.25 (29-oct-2026, general:C7):
+//  · Leer la respuesta de CallMeBot deja de ser una copia: `leerRespuestaWa`
+//    (ahora async) pide `callmebot.js` del panel, que además tapa números.
 //
 // v1.24 (29-oct-2026, general:C7):
 //  · El ojo 👁 deja de ser una copia: lo pide de `ojos.js` del panel
@@ -1011,19 +1015,16 @@ async function avisarClaude(reporteId) {
   } catch (e) { /* silencio a propósito: el reporte ya quedó guardado */ }
 }
 
-export function leerRespuestaWa(txt) {
-  const crudo = String(txt || "");
-  const b = crudo.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
-  if (b.includes("paused") || b.includes("pausada"))
-    return { ok: false, detalle: "Tu cuenta de CallMeBot está en pausa: mandale «resume» al bot desde tu WhatsApp." };
-  if (b.includes("apikey") && (b.includes("not valid") || b.includes("invalid") || b.includes("missing") || b.includes("wrong")))
-    return { ok: false, detalle: "CallMeBot no acepta esa clave. Mandale «Recover APIKey» al bot y te la reenvía." };
-  if (b.includes("not found") || b.includes("no registrado") || b.includes("not registered"))
-    return { ok: false, detalle: "Ese número no está dado de alta en CallMeBot." };
-  if (b.includes("limit") || b.includes("too many"))
-    return { ok: false, detalle: "CallMeBot frenó por límite de uso. Probá en un rato." };
-  if (crudo.toLowerCase().includes("color:red")) return { ok: false, detalle: b.slice(0, 200) };
-  return { ok: true, detalle: b.slice(0, 200) };
+/* Leer la respuesta de CallMeBot (contesta 200 aunque rechace, con el error
+   en rojo adentro). Desde v1.25 (29-oct-2026, `general:C7`) NO vive acá: es
+   `callmebot.js` del panel (`maurogasta-crypto/datos`), la ÚNICA copia del
+   ecosistema, que además tapa los números de teléfono que CallMeBot repite.
+   Se pide recién al usarla, diferida y con catch: si no baja, se dice que no
+   se pudo leer —nunca un «salió bien» inventado—. Banco: `node
+   pruebas/callmebot.mjs` de `datos`. */
+export async function leerRespuestaWa(txt) {
+  try { return (await import("https://maurogasta-crypto.github.io/datos/callmebot.js")).leerRespuestaWa(txt); }
+  catch (e) { return { ok: false, motivo: "sin_leer", detalle: "No pude leer la respuesta de CallMeBot: fijate si te llegó el WhatsApp." }; }
 }
 
 // El '+' se guarda porque se lee mejor y viaja SIN él: es la forma que el
@@ -1142,7 +1143,7 @@ async function probarAvisos() {
     const d = await r.json().catch(() => null);
     if (!d || d.ok !== true) est.textContent = "No salió: " + ((d && d.error) || ("el servidor contestó " + r.status));
     else {
-      const x = leerRespuestaWa(d.respuesta);
+      const x = await leerRespuestaWa(d.respuesta);
       est.textContent = x.ok ? "Mandado. Si en un minuto no llega, el problema es de CallMeBot. Contestó: " + x.detalle : x.detalle;
     }
   } catch (e) {
